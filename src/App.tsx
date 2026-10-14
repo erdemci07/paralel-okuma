@@ -69,6 +69,27 @@ const readingQuotes = [
   'Bazı kitaplar sana ne düşüneceğini değil, neyi yeniden düşünmen gerektiğini gösterir.',
 ]
 
+
+const insanOlmakQuotes = [
+  'İnsan, kendisini tanımaya başladığında başkalarını da farklı görmeye başlar.',
+  'Bazen en büyük yalnızlık, insanların arasında kendine yer bulamamaktır.',
+  'Kendini değerli hissetmek, başkalarının onayına ihtiyaç duymadan yaşayabilmektir.',
+  'İnsanın kendisinden kaçtığı yerde kaygıları konuşmaya başlar.',
+  'Öfkenin ardında bazen söylenememiş bir kırgınlık vardır.',
+  'Başkalarının beklentileriyle kurulan bir hayat, insanı kendisine yabancılaştırabilir.',
+  'Sevilmek kadar, olduğun kişi olarak kabul edilmek de önemlidir.',
+  'Kendi sorumluluğunu üstlenmek, özgürlüğün başlangıcıdır.',
+  'İnsan bazen yalnız kalmaktan değil, kendisiyle karşılaşmaktan korkar.',
+  'Bir ilişki, iki insanın birbirini kaybetmeden yakınlaşabildiği yerde güçlenir.',
+  'Geçmişi değiştiremeyiz; ama onun bugünümüzü nasıl etkilediğini anlayabiliriz.',
+  'Kendini yaşamak, başkalarının biçtiği hayatı sürdürmekten vazgeçebilmektir.',
+]
+
+const quotesByBookId: Record<string, readonly string[]> = {
+  [BOOK.id]: readingQuotes,
+  'insan-olmak': insanOlmakQuotes,
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -427,7 +448,7 @@ function ReadingApp({
   const progressByUser = useMemo(() => buildProgressMap(workspace.progress), [workspace.progress])
   const currentStatusMap = demoMode ? CHAPTER_STATUSES[currentUser] : progressByUser[currentUser]
   const otherStatusMap = demoMode ? CHAPTER_STATUSES[otherUser] : progressByUser[otherUser]
-  const [readingQuote] = useState(() => pickReadingQuote())
+  const readingQuote = useMemo(() => pickReadingQuote(workspace.book.id), [workspace.book.id])
   const completedByCurrent = workspace.chapters.filter((chapter) => currentStatusMap[chapter.id] === 'completed').length
   const completedByOther = workspace.chapters.filter((chapter) => otherStatusMap[chapter.id] === 'completed').length
   const sharedCompleted = workspace.chapters.filter(
@@ -949,14 +970,18 @@ function todayDateValue() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function pickReadingQuote() {
-  const lastIndex = Number(localStorage.getItem('last-reading-quote-index') ?? '-1')
-  let nextIndex = Math.floor(Math.random() * readingQuotes.length)
-  if (readingQuotes.length > 1 && nextIndex === lastIndex) {
-    nextIndex = (nextIndex + 1) % readingQuotes.length
+function pickReadingQuote(bookId: string) {
+  const quotes = quotesByBookId[bookId] ?? ['Her yeni kitap, yeni bir düşünce yolculuğudur.']
+  const storageKey = bookId === BOOK.id
+    ? 'last-reading-quote-index'
+    : `last-reading-quote-index-${bookId}`
+  const lastIndex = Number(localStorage.getItem(storageKey) ?? '-1')
+  let nextIndex = Math.floor(Math.random() * quotes.length)
+  if (quotes.length > 1 && nextIndex === lastIndex) {
+    nextIndex = (nextIndex + 1) % quotes.length
   }
-  localStorage.setItem('last-reading-quote-index', String(nextIndex))
-  return readingQuotes[nextIndex]
+  localStorage.setItem(storageKey, String(nextIndex))
+  return quotes[nextIndex]
 }
 
 export default App
