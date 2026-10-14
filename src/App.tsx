@@ -25,6 +25,7 @@ import {
   signInForProfile,
   signOutCurrentUser,
   subscribeAuth,
+  subscribeLibrary,
   subscribeBookComments,
   subscribeProfile,
   subscribeWorkspace,
@@ -97,6 +98,8 @@ function ProfilePage() {
     activities: [],
   })
   const [comments, setComments] = useState<CommentDoc[]>([])
+  const [library, setLibrary] = useState<LibraryBook[]>([])
+  const [selectedBookId, setSelectedBookId] = useState('var-misin')
   const [workspaceLoad, setWorkspaceLoad] = useState(() => createWorkspaceLoadState())
   const [workspaceError, setWorkspaceError] = useState('')
   const [commentsError, setCommentsError] = useState('')
@@ -131,6 +134,17 @@ function ProfilePage() {
 
   useEffect(() => {
     if (!profile?.isMember || profile.profileId !== currentUser) return
+    return subscribeLibrary(setLibrary, (error) => logFirestoreError(error))
+  }, [currentUser, profile?.isMember, profile?.profileId])
+
+  useEffect(() => {
+    setWorkspaceLoad(createWorkspaceLoadState())
+    setWorkspaceError('')
+    setComments([])
+  }, [selectedBookId])
+
+  useEffect(() => {
+    if (!profile?.isMember || profile.profileId !== currentUser) return
 
     return subscribeWorkspace(setWorkspace, (status) => {
       setWorkspaceLoad((current) => ({ ...current, [status.source]: status }))
@@ -140,8 +154,8 @@ function ProfilePage() {
       } else {
         setWorkspaceError('')
       }
-    })
-  }, [currentUser, profile?.isMember, profile?.profileId, profile?.uid])
+    }, selectedBookId)
+  }, [currentUser, profile?.isMember, profile?.profileId, profile?.uid, selectedBookId])
 
   useEffect(() => {
     if (!profile?.isMember || profile.profileId !== currentUser) return
@@ -155,8 +169,9 @@ function ProfilePage() {
         logFirestoreError(error)
         setCommentsError(mapFirestoreError(error))
       },
+      selectedBookId,
     )
-  }, [currentUser, profile?.isMember, profile?.profileId, profile?.uid])
+  }, [currentUser, profile?.isMember, profile?.profileId, profile?.uid, selectedBookId])
 
   if (!isFirebaseConfigured) {
     return <ReadingApp currentUser={currentUser} profile={null} workspace={workspace} comments={comments} demoMode locationPath={location.pathname} />
@@ -232,6 +247,9 @@ function ProfilePage() {
       comments={comments}
       commentsError={commentsError}
       locationPath={location.pathname}
+      library={library}
+      onSelectBook={setSelectedBookId}
+      key={selectedBookId}
     />
   )
 }
@@ -387,9 +405,13 @@ function ReadingApp({
   commentsError = '',
   demoMode = false,
   locationPath,
+  library = [],
+  onSelectBook,
 }: {
   currentUser: UserKey
   profile: MemberProfile | null
+  library?: LibraryBook[]
+  onSelectBook?: (bookId: string) => void
   workspace: {
     book: LibraryBook
     chapters: typeof CHAPTERS
@@ -416,6 +438,7 @@ function ReadingApp({
   return (
     <ShellFrame currentUser={currentUser} locationPath={locationPath}>
       <NotificationSetup profile={profile} demoMode={demoMode} />
+      {library.length > 1 ? <nav className="book-switcher" aria-label="Kitap seçimi">{library.map((book) => <button key={book.id} type="button" className={book.id === workspace.book.id ? 'book-choice active' : 'book-choice'} onClick={() => onSelectBook?.(book.id)}>{book.title}</button>)}</nav> : null}
 
       <section id="book" className="panel book-panel">
         <div className="book-header">
@@ -459,6 +482,7 @@ function ReadingApp({
             <ChapterCard
               key={`${chapter.id}-${currentStatus}-${otherStatus}-${currentProgressDate ?? ''}-${plan?.plannedDate ?? ''}-${plan?.type ?? ''}`}
               chapter={chapter}
+              bookId={workspace.book.id}
               plan={plan}
               currentUser={currentUser}
               otherUser={otherUser}
@@ -493,6 +517,7 @@ function MiniProgress({ user, completed, total }: { user: UserKey; completed: nu
 
 function ChapterCard({
   chapter,
+  bookId,
   plan,
   currentUser,
   otherUser,
@@ -506,6 +531,7 @@ function ChapterCard({
   comments,
 }: {
   chapter: typeof CHAPTERS[number]
+  bookId: string
   plan?: PlanDoc
   currentUser: UserKey
   otherUser: UserKey
@@ -532,7 +558,7 @@ function ChapterCard({
     const nextActivityDate = currentStatus === 'completed' && status !== 'completed' ? todayDateValue() : activityDate
     setActivityDate(nextActivityDate)
     try {
-      await updateProgress(profile, chapter.id, status, nextActivityDate)
+      await updateProgress(profile, chapter.id, status, nextActivityDate, bookId)
     } catch {
       setError('Durum kaydedilemedi.')
     }
@@ -543,7 +569,7 @@ function ChapterCard({
     if (!profile) return
     setError('')
     try {
-      await savePlan(profile, chapter.id, planDate, planNote, planType, plan?.id)
+      await savePlan(profile, chapter.id, planDate, planNote, planType, plan?.id, bookId)
       setPlanNote('')
     } catch {
       setError('Plan kaydedilemedi.')
@@ -555,7 +581,7 @@ function ChapterCard({
     if (!profile) return
     setError('')
     try {
-      await addComment(profile, chapter.id, commentText)
+      await addComment(profile, chapter.id, commentText, bookId)
       setCommentText('')
     } catch {
       setError('Yorum kaydedilemedi.')
@@ -578,7 +604,7 @@ function ChapterCard({
       {plan && !isCollapsed ? (
         <div className="plan-badge">
           {formatActivityDate(plan.plannedDate)} · {plan.type === 'shared' ? 'ortak' : USERS[plan.createdBy].shortName}
-          {profile ? <button type="button" onClick={() => void cancelPlan(profile, plan.id, chapter.id)}>İptal</button> : null}
+          {profile ? <button type="button" onClick={() => void cancelPlan(profile, plan.id, chapter.id, bookId)}>İptal</button> : null}
         </div>
       ) : null}
 
