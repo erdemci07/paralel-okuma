@@ -138,12 +138,6 @@ function ProfilePage() {
   }, [currentUser, profile?.isMember, profile?.profileId])
 
   useEffect(() => {
-    setWorkspaceLoad(createWorkspaceLoadState())
-    setWorkspaceError('')
-    setComments([])
-  }, [selectedBookId])
-
-  useEffect(() => {
     if (!profile?.isMember || profile.profileId !== currentUser) return
 
     return subscribeWorkspace(setWorkspace, (status) => {
@@ -248,7 +242,12 @@ function ProfilePage() {
       commentsError={commentsError}
       locationPath={location.pathname}
       library={library}
-      onSelectBook={setSelectedBookId}
+      onSelectBook={(bookId) => {
+        setWorkspaceLoad(createWorkspaceLoadState())
+        setWorkspaceError('')
+        setComments([])
+        setSelectedBookId(bookId)
+      }}
       key={selectedBookId}
     />
   )
