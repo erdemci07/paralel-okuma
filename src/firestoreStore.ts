@@ -11,7 +11,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore'
-import { deleteToken, getToken, onMessage } from 'firebase/messaging'
+import { getToken, onMessage } from 'firebase/messaging'
 import type { Unsubscribe, User as FirebaseUser } from 'firebase/auth'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import type { DocumentData, Firestore, QueryDocumentSnapshot } from 'firebase/firestore'
@@ -546,7 +546,6 @@ export async function registerDeviceForPush(profile: MemberProfile, onForeground
   const unsubscribe = onMessage(messaging, onForegroundMessage)
   return async () => {
     unsubscribe()
-    await deleteToken(messaging).catch(() => undefined)
   }
 }
 
