@@ -518,8 +518,7 @@ function ChapterCard({
   demoMode: boolean
   comments: CommentDoc[]
 }) {
-  const isSharedCompleted = currentStatus === 'completed' && otherStatus === 'completed'
-  const [isCollapsed, setIsCollapsed] = useState(isSharedCompleted)
+  const [isCollapsed, setIsCollapsed] = useState(true)
   const [activityDate, setActivityDate] = useState(currentProgressDate ?? todayDateValue())
   const [planDate, setPlanDate] = useState(plan?.plannedDate ?? todayDateValue())
   const [planNote, setPlanNote] = useState('')
@@ -583,10 +582,19 @@ function ChapterCard({
         </div>
       ) : null}
 
-      <div className="status-stack">
-        <PersonStatus user={currentUser} status={currentStatus} activity={currentActivity} />
-        <PersonStatus user={otherUser} status={otherStatus} activity={otherActivity} readOnly />
-      </div>
+      {isCollapsed ? (
+        <div className="chapter-compact-summary">
+          <span>{USERS[currentUser].name}: {STATUS_LABELS[currentStatus]}</span>
+          <span>{USERS[otherUser].name}: {STATUS_LABELS[otherStatus]}</span>
+          {plan ? <span className="chapter-compact-plan">Plan: {formatActivityDate(plan.plannedDate)}</span> : null}
+          {comments.length > 0 ? <span>{comments.length} not</span> : null}
+        </div>
+      ) : (
+        <div className="status-stack">
+          <PersonStatus user={currentUser} status={currentStatus} activity={currentActivity} />
+          <PersonStatus user={otherUser} status={otherStatus} activity={otherActivity} readOnly />
+        </div>
+      )}
 
       {!isCollapsed ? (
         <>
