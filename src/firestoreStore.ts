@@ -73,6 +73,7 @@ export type ActivityDoc = {
   type:
     | 'status_started'
     | 'status_completed'
+    | 'status_reset'
     | 'comment_added'
     | 'reading_plan_created'
     | 'reading_plan_updated'
@@ -145,7 +146,7 @@ function todayISO() {
 function statusActivityType(status: Status) {
   if (status === 'reading') return 'status_started'
   if (status === 'completed') return 'status_completed'
-  return null
+  return 'status_reset'
 }
 
 function progressActivityText(userId: UserKey, status: Status, chapterId: number, activityDate: string) {
@@ -153,7 +154,7 @@ function progressActivityText(userId: UserKey, status: Status, chapterId: number
   const dateText = formatActivityDate(activityDate)
   if (status === 'reading') return `${name} ${chapterId}. bölümü ${dateText} okumaya başladı.`
   if (status === 'completed') return `${name} ${chapterId}. bölümü ${dateText} tamamladı.`
-  return `${name} ${chapterId}. bölüm durumunu güncelledi.`
+  return `${name} ${chapterId}. bölüm durumunu sıfırladı.`
 }
 
 export function formatActivityDate(value?: string) {
@@ -379,9 +380,9 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
       (error) => onStatus({ state: 'error', source: 'plans', error }),
     ),
     onSnapshot(
-      query(collection(database, 'activities'), orderBy('createdAt', 'desc'), limit(30)),
+      query(collection(database, 'activities'), where('bookId', '==', bookId), orderBy('createdAt', 'desc'), limit(60)),
       (snapshot) => {
-        state.activities = snapshot.docs.map((item) => fromDoc<ActivityDoc>(item)).filter((activity) => activity.bookId === bookId)
+        state.activities = snapshot.docs.map((item) => fromDoc<ActivityDoc>(item))
         onStatus({ state: 'success', source: 'activities' })
         emit()
       },

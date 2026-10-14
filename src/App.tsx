@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { User as FirebaseUser } from 'firebase/auth'
 import {
   BOOK,
@@ -105,7 +105,9 @@ function App() {
 function ProfilePage() {
   const { userKey } = useParams<{ userKey?: string }>()
   const location = useLocation()
+  const navigate = useNavigate()
   const currentUser = normalizeUserKey(userKey) ?? 'faruk'
+  const selectedBookId = new URLSearchParams(location.search).get('book')
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
   const [profile, setProfile] = useState<MemberProfile | null>(null)
   const [authLoaded, setAuthLoaded] = useState(false)
@@ -120,7 +122,7 @@ function ProfilePage() {
   })
   const [comments, setComments] = useState<CommentDoc[]>([])
   const [library, setLibrary] = useState<LibraryBook[]>([])
-  const [selectedBookId, setSelectedBookId] = useState('var-misin')
+  const [libraryStatus, setLibraryStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [workspaceLoad, setWorkspaceLoad] = useState(() => createWorkspaceLoadState())
   const [workspaceError, setWorkspaceError] = useState('')
   const [commentsError, setCommentsError] = useState('')
@@ -155,11 +157,20 @@ function ProfilePage() {
 
   useEffect(() => {
     if (!profile?.isMember || profile.profileId !== currentUser) return
-    return subscribeLibrary(setLibrary, (error) => logFirestoreError(error))
+    return subscribeLibrary(
+      (books) => {
+        setLibrary(books)
+        setLibraryStatus('ready')
+      },
+      (error) => {
+        logFirestoreError(error)
+        setLibraryStatus('error')
+      },
+    )
   }, [currentUser, profile?.isMember, profile?.profileId])
 
   useEffect(() => {
-    if (!profile?.isMember || profile.profileId !== currentUser) return
+    if (!selectedBookId || !profile?.isMember || profile.profileId !== currentUser) return
 
     return subscribeWorkspace(setWorkspace, (status) => {
       setWorkspaceLoad((current) => ({ ...current, [status.source]: status }))
@@ -173,7 +184,7 @@ function ProfilePage() {
   }, [currentUser, profile?.isMember, profile?.profileId, profile?.uid, selectedBookId])
 
   useEffect(() => {
-    if (!profile?.isMember || profile.profileId !== currentUser) return
+    if (!selectedBookId || !profile?.isMember || profile.profileId !== currentUser) return
 
     return subscribeBookComments(
       (nextComments) => {
@@ -239,6 +250,30 @@ function ProfilePage() {
     )
   }
 
+  function openBook(bookId: string) {
+    setWorkspaceLoad(createWorkspaceLoadState())
+    setWorkspaceError('')
+    setComments([])
+    setCommentsError('')
+    navigate({ pathname: `/${currentUser}`, search: `?book=${encodeURIComponent(bookId)}`, hash: '' })
+  }
+
+  if (!selectedBookId) {
+    if (libraryStatus === 'loading') {
+      return <ShellFrame currentUser={currentUser} locationPath={location.pathname} showBottomNav={false}><LoadingPanel /></ShellFrame>
+    }
+    if (libraryStatus === 'error') {
+      return (
+        <ShellFrame currentUser={currentUser} locationPath={location.pathname} showBottomNav={false}>
+          <section className="panel notice-panel">Kitaplar yüklenemedi. Bağlantınızı kontrol edip sayfayı yenileyin.</section>
+        </ShellFrame>
+      )
+    }
+    return (
+      <BookLibrary currentUser={currentUser} books={library} onSelectBook={openBook} />
+    )
+  }
+
   const workspaceMessage = workspaceError || getWorkspaceEmptyMessage(workspaceLoad)
   const workspaceReady = isWorkspaceReady(workspaceLoad)
 
@@ -263,14 +298,47 @@ function ProfilePage() {
       commentsError={commentsError}
       locationPath={location.pathname}
       library={library}
-      onSelectBook={(bookId) => {
-        setWorkspaceLoad(createWorkspaceLoadState())
-        setWorkspaceError('')
-        setComments([])
-        setSelectedBookId(bookId)
-      }}
+      onSelectBook={openBook}
+      onShowLibrary={() => navigate({ pathname: `/${currentUser}`, search: '', hash: '' })}
       key={selectedBookId}
     />
+  )
+}
+
+function BookLibrary({
+  currentUser,
+  books,
+  onSelectBook,
+}: {
+  currentUser: UserKey
+  books: LibraryBook[]
+  onSelectBook: (bookId: string) => void
+}) {
+  const sortedBooks = [...books].sort((a, b) =>
+    a.id === BOOK.id ? -1 : b.id === BOOK.id ? 1 : a.title.localeCompare(b.title, 'tr'),
+  )
+
+  return (
+    <ShellFrame currentUser={currentUser} locationPath={`/${currentUser}`} showBottomNav={false}>
+      <section id="book" className="panel library-panel">
+        <p className="eyebrow">Paralel Okuma</p>
+        <h2>Kitaplığımız</h2>
+        <p className="library-intro">Okumaya devam etmek istediğiniz kitabı seçin.</p>
+        <div className="library-grid">
+          {sortedBooks.map((book) => (
+            <button key={book.id} type="button" className="library-book" onClick={() => onSelectBook(book.id)}>
+              <span className="library-cover">
+                <img src={book.coverUrl || book.cover} alt={`${book.title} kitap kapağı`} loading="lazy" />
+              </span>
+              <span className="library-book-title">{book.title}</span>
+              <span className="library-book-author">{book.author}</span>
+              <span className="library-book-chapters">{book.chapterCount} bölüm · Kitabı aç →</span>
+            </button>
+          ))}
+        </div>
+        {sortedBooks.length === 0 ? <p className="library-intro">Henüz kitap bulunmuyor.</p> : null}
+      </section>
+    </ShellFrame>
   )
 }
 
@@ -393,10 +461,12 @@ function ShellFrame({
   currentUser,
   locationPath,
   children,
+  showBottomNav = true,
 }: {
   currentUser: UserKey
   locationPath: string
   children: React.ReactNode
+  showBottomNav?: boolean
 }) {
   return (
     <div className="app-shell">
@@ -412,7 +482,7 @@ function ShellFrame({
         </div>
       </header>
       <main className="screen" data-path={locationPath}>{children}</main>
-      <BottomNav />
+      {showBottomNav ? <BottomNav /> : null}
     </div>
   )
 }
@@ -427,11 +497,13 @@ function ReadingApp({
   locationPath,
   library = [],
   onSelectBook,
+  onShowLibrary,
 }: {
   currentUser: UserKey
   profile: MemberProfile | null
   library?: LibraryBook[]
   onSelectBook?: (bookId: string) => void
+  onShowLibrary?: () => void
   workspace: {
     book: LibraryBook
     chapters: typeof CHAPTERS
@@ -449,6 +521,7 @@ function ReadingApp({
   const currentStatusMap = demoMode ? CHAPTER_STATUSES[currentUser] : progressByUser[currentUser]
   const otherStatusMap = demoMode ? CHAPTER_STATUSES[otherUser] : progressByUser[otherUser]
   const readingQuote = useMemo(() => pickReadingQuote(workspace.book.id), [workspace.book.id])
+  useReadingScrollPosition(currentUser, workspace.book.id)
   const completedByCurrent = workspace.chapters.filter((chapter) => currentStatusMap[chapter.id] === 'completed').length
   const completedByOther = workspace.chapters.filter((chapter) => otherStatusMap[chapter.id] === 'completed').length
   const sharedCompleted = workspace.chapters.filter(
@@ -458,6 +531,7 @@ function ReadingApp({
   return (
     <ShellFrame currentUser={currentUser} locationPath={locationPath}>
       <NotificationSetup profile={profile} demoMode={demoMode} />
+      {onShowLibrary ? <button type="button" className="library-back" onClick={onShowLibrary}>← Tüm kitaplar</button> : null}
       {library.length > 1 ? <nav className="book-switcher" aria-label="Kitap seçimi">{library.map((book) => <button key={book.id} type="button" className={book.id === workspace.book.id ? 'book-choice active' : 'book-choice'} onClick={() => onSelectBook?.(book.id)}>{book.title}</button>)}</nav> : null}
 
       <section id="book" className="panel book-panel">
@@ -520,7 +594,7 @@ function ReadingApp({
       </section>
 
       {commentsError ? <section className="panel notice-panel"><p>{commentsError}</p></section> : null}
-      <ActivityPanel activities={demoMode ? [] : workspace.activities} />
+      <ActivityPanel activities={workspace.activities} demoMode={demoMode} />
       <ProfilePanel profile={profile} demoMode={demoMode} />
     </ShellFrame>
   )
@@ -564,7 +638,8 @@ function ChapterCard({
   demoMode: boolean
   comments: CommentDoc[]
 }) {
-  const [isCollapsed, setIsCollapsed] = useState(true)
+  const chapterStateKey = `reading-expanded:${currentUser}:${bookId}:${chapter.id}`
+  const [isCollapsed, setIsCollapsed] = useState(() => sessionStorage.getItem(chapterStateKey) !== '1')
   const [activityDate, setActivityDate] = useState(currentProgressDate ?? todayDateValue())
   const [planDate, setPlanDate] = useState(plan?.plannedDate ?? todayDateValue())
   const [planNote, setPlanNote] = useState('')
@@ -616,7 +691,12 @@ function ChapterCard({
           <h4>{chapter.title}</h4>
           <p>s. {chapter.startPage}-{chapter.endPage === 'end' ? 'son' : chapter.endPage}</p>
         </div>
-        <button type="button" className="chapter-toggle" onClick={() => setIsCollapsed((value) => !value)}>
+        <button type="button" className="chapter-toggle" onClick={() => {
+          setIsCollapsed((value) => {
+            sessionStorage.setItem(chapterStateKey, value ? '1' : '0')
+            return !value
+          })
+        }}>
           {isCollapsed ? 'Genişlet' : 'Gizle'}
         </button>
       </div>
@@ -717,36 +797,35 @@ function PersonStatus({ user, status, activity, readOnly = false }: { user: User
   )
 }
 
-function ActivityPanel({ activities }: { activities: ActivityDoc[] }) {
+function ActivityPanel({ activities, demoMode }: { activities: ActivityDoc[]; demoMode: boolean }) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const fallback = [
-    { id: 'demo-1', actor: 'berfin' as const, text: '2. bölümü okumaya başladı', activityDate: new Date().toISOString().slice(0, 10) },
-    { id: 'demo-2', actor: 'faruk' as const, text: '1. bölümü tamamladı', activityDate: new Date().toISOString().slice(0, 10) },
-  ]
-  const allItems = activities.length ? activities : fallback
-  const items = isExpanded ? allItems : allItems.slice(0, 5)
+  const items = isExpanded ? activities : activities.slice(0, 5)
 
   return (
     <section id="activity" className="panel">
       <div className="section-header">
         <h3>Hareketler</h3>
-        {allItems.length > 5 ? (
+        {activities.length > 5 ? (
           <button type="button" className="ghost-button variant-small" onClick={() => setIsExpanded((value) => !value)}>
             {isExpanded ? 'Gizle' : 'Tümünü göster'}
           </button>
         ) : null}
       </div>
-      <ul className="activity-list">
-        {items.map((item) => (
-          <li key={item.id} className="activity-item">
-            <span className="dot" aria-hidden="true" />
-            <div>
-              <strong>{item.text}</strong>
-              <small>{formatActivityDate(item.activityDate)}</small>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {activities.length === 0 ? (
+        <p className="activity-empty">{demoMode ? 'Demo modunda hareket kaydı tutulmaz.' : 'Bu kitapta henüz hareket yok. Okumaya başlayınca, bölüm tamamlayınca, not yazınca veya plan oluşturunca burada görünecek.'}</p>
+      ) : (
+        <ul className="activity-list">
+          {items.map((item) => (
+            <li key={item.id} className="activity-item">
+              <span className="dot" aria-hidden="true" />
+              <div>
+                <strong>{item.text}</strong>
+                <small>{formatActivityDate(item.activityDate)}</small>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }
@@ -968,6 +1047,40 @@ function progressDateValue(progress: ProgressDoc[], user: UserKey, chapterId: nu
 
 function todayDateValue() {
   return new Date().toISOString().slice(0, 10)
+}
+
+function useReadingScrollPosition(userId: UserKey, bookId: string) {
+  useEffect(() => {
+    const storageKey = `reading-scroll:${userId}:${bookId}`
+    // Attach the scroll listener after restoration to avoid overwriting the saved position.
+    const savedPosition = Number(sessionStorage.getItem(storageKey))
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        if (window.location.hash) {
+          const target = document.getElementById(decodeURIComponent(window.location.hash.slice(1)))
+          target?.scrollIntoView()
+        } else if (Number.isFinite(savedPosition) && savedPosition > 0) {
+          window.scrollTo(0, savedPosition)
+        } else {
+          window.scrollTo(0, 0)
+        }
+        window.addEventListener('scroll', rememberScroll, { passive: true })
+        window.addEventListener('pagehide', rememberScroll)
+      })
+    })
+    let secondFrame = 0
+
+    function rememberScroll() {
+      sessionStorage.setItem(storageKey, String(Math.round(window.scrollY)))
+    }
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame)
+      window.cancelAnimationFrame(secondFrame)
+      window.removeEventListener('scroll', rememberScroll)
+      window.removeEventListener('pagehide', rememberScroll)
+    }
+  }, [userId, bookId])
 }
 
 function pickReadingQuote(bookId: string) {
