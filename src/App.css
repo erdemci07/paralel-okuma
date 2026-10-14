@@ -223,6 +223,30 @@
   margin-top: 12px;
 }
 
+.chapter-compact-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.79rem;
+}
+.chapter-compact-summary span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(108, 138, 125, 0.09);
+}
+.chapter-compact-summary .chapter-compact-plan {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.chapter-card:has(.chapter-compact-summary) {
+  gap: 8px;
+  padding: 10px 12px;
+}
+.chapter-card:has(.chapter-compact-summary) .chapter-number {
+  min-width: 32px;
+  height: 32px;
+}
 .chapter-head {
   display: flex;
   gap: 12px;
