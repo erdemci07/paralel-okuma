@@ -1,4 +1,4 @@
-name: Firebase Hosting CI
+name: Paralel Okuma CI and Deploy
 on:
   push:
     branches: [main]
@@ -7,8 +7,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: paralel-okuma-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  build:
+  verify-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,9 +19,26 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Validate Firebase configuration
+        if: github.event_name != 'pull_request'
+        env:
+          API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+        run: |
+          test -n "$API_KEY"
+          test -n "$AUTH_DOMAIN"
+          test "$PROJECT_ID" = "paralel-okuma"
+          test -n "$APP_ID"
+          test -n "$SENDER_ID"
+      - name: Build
+        run: npm run build
         env:
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
@@ -27,3 +47,14 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
+      - name: Authenticate to Firebase
+        if: github.event_name != 'pull_request'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PARALLEL_OKUMA }}
+      - name: Add İnsan Olmak (preserve existing records)
+        if: github.event_name != 'pull_request'
+        run: node scripts/seed-insan-olmak.mjs --projectId=paralel-okuma
+      - name: Deploy Firebase Hosting
+        if: github.event_name != 'pull_request'
+        run: npx --yes firebase-tools@14 deploy --only hosting --project paralel-okuma --non-interactive
