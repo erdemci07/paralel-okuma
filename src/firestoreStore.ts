@@ -7,6 +7,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
@@ -380,9 +381,16 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
       (error) => onStatus({ state: 'error', source: 'plans', error }),
     ),
     onSnapshot(
-      query(collection(database, 'activities'), where('bookId', '==', bookId), orderBy('createdAt', 'desc'), limit(60)),
+      query(collection(database, 'activities'), where('bookId', '==', bookId)),
       (snapshot) => {
-        state.activities = snapshot.docs.map((item) => fromDoc<ActivityDoc>(item))
+        state.activities = snapshot.docs
+          .map((item) => fromDoc<ActivityDoc>(item))
+          .sort((a, b) => {
+            const first = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0
+            const second = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0
+            return second - first
+          })
+          .slice(0, 60)
         onStatus({ state: 'success', source: 'activities' })
         emit()
       },

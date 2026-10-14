@@ -55,9 +55,6 @@ jobs:
       - name: Add İnsan Olmak (preserve existing records)
         if: github.event_name != 'pull_request'
         run: node scripts/seed-insan-olmak.mjs --projectId=paralel-okuma
-      - name: Deploy Firestore activity index
-        if: github.event_name != 'pull_request'
-        run: npx --yes firebase-tools@14 deploy --only firestore:indexes --project paralel-okuma --non-interactive
       - name: Deploy Firebase Hosting
         if: github.event_name != 'pull_request'
         run: npx --yes firebase-tools@14 deploy --only hosting --project paralel-okuma --non-interactive
