@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function ownUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isMember() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && ownUserDoc().data.isMember == true
+        && ownUserDoc().data.profileId in ['faruk', 'berfin'];
+    }
+
+    function profileId() {
+      return ownUserDoc().data.profileId;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create, delete: if false;
+      allow update: if isMember()
+        && isOwner(uid)
+        && request.resource.data.profileId == resource.data.profileId
+        && request.resource.data.displayName == resource.data.displayName
+        && request.resource.data.isMember == resource.data.isMember;
+
+      match /devices/{deviceId} {
+        allow read, create, update, delete: if isMember() && isOwner(uid);
+      }
+    }
+
+    match /books/{bookId} {
+      allow read: if isMember();
+      allow create: if isMember()
+        && request.resource.data.createdBy == profileId()
+        && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if isMember();
+      allow delete: if false;
+
+      match /chapters/{chapterId} {
+        allow read: if isMember();
+        allow create, update: if isMember();
+        allow delete: if false;
+      }
+
+      match /progress/{progressId} {
+        allow read: if isMember();
+        allow create, update: if isMember()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.userId == profileId();
+        allow delete: if isMember()
+          && resource.data.uid == request.auth.uid
+          && resource.data.userId == profileId();
+      }
+
+      match /comments/{commentId} {
+        allow read: if isMember();
+        allow create: if isMember()
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorProfileId == profileId();
+        allow update: if isMember()
+          && resource.data.authorId == request.auth.uid
+          && request.resource.data.authorId == resource.data.authorId
+          && request.resource.data.authorProfileId == resource.data.authorProfileId;
+        allow delete: if isMember() && resource.data.authorId == request.auth.uid;
+      }
+
+      match /plans/{planId} {
+        allow read: if isMember();
+        allow create: if isMember()
+          && request.resource.data.createdByUid == request.auth.uid
+          && request.resource.data.createdBy == profileId()
+          && request.resource.data.type in ['personal', 'shared'];
+        allow update: if isMember()
+          && request.resource.data.type in ['personal', 'shared']
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdByUid == resource.data.createdByUid
+          && (resource.data.type == 'shared' || resource.data.createdByUid == request.auth.uid);
+        allow delete: if false;
+      }
+    }
+
+    match /activities/{activityId} {
+      allow read: if isMember();
+      allow create: if isMember()
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.actor == profileId();
+      allow update, delete: if false;
+    }
+  }
+}

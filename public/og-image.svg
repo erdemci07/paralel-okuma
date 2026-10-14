@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Paralel Okuma</title>
+  <desc id="desc">Birlikte oku, ilerlemeyi takip et, notlarını paylaş.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f6efe7"/>
+      <stop offset="100%" stop-color="#f0dbc2"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="220" cy="150" r="90" fill="#d7a66c" opacity="0.22"/>
+  <circle cx="980" cy="480" r="110" fill="#8a5d39" opacity="0.14"/>
+  <g transform="translate(110 170)">
+    <path d="M70 80C70 36 104 0 148 0h76c44 0 78 36 78 80v180c0 44-34 80-78 80h-76c-44 0-78-36-78-80V80Z" fill="#f9fafb" stroke="#8a5d39" stroke-width="8"/>
+    <path d="M148 30v220" stroke="#8a5d39" stroke-width="8"/>
+    <path d="M60 55h88M60 160h88M60 250h88" stroke="#d9b28b" stroke-width="10" stroke-linecap="round"/>
+    <path d="M148 30v220" stroke="#8a5d39" stroke-width="8"/>
+    <path d="M238 55h88M238 160h88M238 250h88" stroke="#d9b28b" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <text x="610" y="250" text-anchor="middle" font-size="72" font-family="Segoe UI, Arial, sans-serif" fill="#2c1e17" font-weight="700">Paralel Okuma</text>
+  <text x="610" y="330" text-anchor="middle" font-size="30" font-family="Segoe UI, Arial, sans-serif" fill="#5a453a">Birlikte oku, ilerlemeyi takip et, notlarını paylaş.</text>
+  <g transform="translate(450 390)">
+    <rect width="300" height="80" rx="18" fill="#fefaf6" stroke="#cfb299"/>
+    <text x="150" y="52" text-anchor="middle" font-size="28" font-family="Segoe UI, Arial, sans-serif" fill="#7b533e">📚 Kitaplar</text>
+  </g>
+</svg>
