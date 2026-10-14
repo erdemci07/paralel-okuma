@@ -259,7 +259,29 @@ function logMembershipDiagnostic(event: string, details: Record<string, unknown>
   }
 }
 
-export function subscribeWorkspace(callback: (state: WorkspaceState) => void, onStatus: (status: WorkspaceStatus) => void) {
+export function subscribeLibrary(callback: (books: LibraryBook[]) => void, onError: (error: FirestoreError) => void) {
+  const database = requireDb()
+  return onSnapshot(collection(database, 'books'), (snapshot) => {
+    callback(snapshot.docs.map((item) => {
+      const data = item.data()
+      return {
+        id: item.id,
+        title: data.title ?? '',
+        author: data.author ?? (Array.isArray(data.authors) ? data.authors.join(', ') : ''),
+        authors: data.authors ?? [],
+        cover: data.coverUrl ?? data.cover ?? '',
+        coverUrl: data.coverUrl ?? data.cover ?? '',
+        description: data.description ?? '',
+        chapterCount: data.chapterCount ?? 0,
+        isbn: data.isbn ?? '',
+        publisher: data.publisher ?? '',
+        publishedDate: data.publishedDate ?? '',
+      } as LibraryBook
+    }))
+  }, onError)
+}
+
+export function subscribeWorkspace(callback: (state: WorkspaceState) => void, onStatus: (status: WorkspaceStatus) => void, bookId = bookId) {
   if (!db) {
     callback({
       book: {
@@ -302,7 +324,7 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
   const database = requireDb()
   const unsubscribers = [
     onSnapshot(
-      doc(database, 'books', DEFAULT_BOOK_ID),
+      doc(database, 'books', bookId),
       (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.data()
@@ -330,7 +352,7 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
       (error) => onStatus({ state: 'error', source: 'book', error }),
     ),
     onSnapshot(
-      query(collection(database, 'books', DEFAULT_BOOK_ID, 'chapters'), orderBy('id')),
+      query(collection(database, 'books', bookId, 'chapters'), orderBy('id')),
       (snapshot) => {
         state.chapters = snapshot.docs.map((item) => fromDoc<Chapter>(item))
         onStatus(snapshot.empty ? { state: 'empty', source: 'chapters' } : { state: 'success', source: 'chapters' })
@@ -339,7 +361,7 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
       (error) => onStatus({ state: 'error', source: 'chapters', error }),
     ),
     onSnapshot(
-      query(collection(database, 'books', DEFAULT_BOOK_ID, 'progress'), where('userId', 'in', ['faruk', 'berfin'])),
+      query(collection(database, 'books', bookId, 'progress'), where('userId', 'in', ['faruk', 'berfin'])),
       (snapshot) => {
         state.progress = snapshot.docs.map((item) => fromDoc<ProgressDoc>(item))
         onStatus({ state: 'success', source: 'progress' })
@@ -348,7 +370,7 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
       (error) => onStatus({ state: 'error', source: 'progress', error }),
     ),
     onSnapshot(
-      query(collection(database, 'books', DEFAULT_BOOK_ID, 'plans'), orderBy('plannedDate'), limit(30)),
+      query(collection(database, 'books', bookId, 'plans'), orderBy('plannedDate'), limit(30)),
       (snapshot) => {
         state.plans = snapshot.docs.map((item) => fromDoc<PlanDoc>(item)).filter((plan) => !plan.cancelledAt)
         onStatus({ state: 'success', source: 'plans' })
@@ -359,7 +381,7 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
     onSnapshot(
       query(collection(database, 'activities'), orderBy('createdAt', 'desc'), limit(30)),
       (snapshot) => {
-        state.activities = snapshot.docs.map((item) => fromDoc<ActivityDoc>(item))
+        state.activities = snapshot.docs.map((item) => fromDoc<ActivityDoc>(item)).filter((activity) => activity.bookId === bookId)
         onStatus({ state: 'success', source: 'activities' })
         emit()
       },
@@ -370,23 +392,23 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
   return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
 }
 
-export function subscribeBookComments(callback: (comments: CommentDoc[]) => void, onError: (error: FirestoreError) => void) {
+export function subscribeBookComments(callback: (comments: CommentDoc[]) => void, onError: (error: FirestoreError) => void, bookId = bookId) {
   if (!db) {
     callback([])
     return () => undefined
   }
 
   return onSnapshot(
-    query(collection(db, 'books', DEFAULT_BOOK_ID, 'comments'), orderBy('createdAt', 'desc'), limit(50)),
+    query(collection(db, 'books', bookId, 'comments'), orderBy('createdAt', 'desc'), limit(50)),
     (snapshot) => callback(snapshot.docs.map((item) => fromDoc<CommentDoc>(item))),
     onError,
   )
 }
 
-export async function updateProgress(profile: MemberProfile, chapterId: number, status: Status, activityDate: string) {
+export async function updateProgress(profile: MemberProfile, chapterId: number, status: Status, activityDate: string, bookId = DEFAULT_BOOK_ID) {
   const database = requireDb()
   const progressId = `${profile.uid}_${chapterId}`
-  const progressRef = doc(database, 'books', DEFAULT_BOOK_ID, 'progress', progressId)
+  const progressRef = doc(database, 'books', bookId, 'progress', progressId)
   const activityRef = doc(collection(database, 'activities'))
   const batch = writeBatch(database)
   const statusType = statusActivityType(status)
@@ -412,7 +434,7 @@ export async function updateProgress(profile: MemberProfile, chapterId: number, 
       actor: profile.profileId,
       actorUid: profile.uid,
       type: statusType,
-      bookId: DEFAULT_BOOK_ID,
+      bookId: bookId,
       chapterId,
       activityDate,
       createdAt: serverTimestamp(),
@@ -423,9 +445,9 @@ export async function updateProgress(profile: MemberProfile, chapterId: number, 
   await batch.commit()
 }
 
-export async function savePlan(profile: MemberProfile, chapterId: number, plannedDate: string, note: string, type: 'personal' | 'shared', planId?: string) {
+export async function savePlan(profile: MemberProfile, chapterId: number, plannedDate: string, note: string, type: 'personal' | 'shared', planId?: string, bookId = DEFAULT_BOOK_ID) {
   const database = requireDb()
-  const planRef = planId ? doc(database, 'books', DEFAULT_BOOK_ID, 'plans', planId) : doc(collection(database, 'books', DEFAULT_BOOK_ID, 'plans'))
+  const planRef = planId ? doc(database, 'books', bookId, 'plans', planId) : doc(collection(database, 'books', bookId, 'plans'))
   const activityRef = doc(collection(database, 'activities'))
   const batch = writeBatch(database)
   const activityType = planId ? 'reading_plan_updated' : 'reading_plan_created'
@@ -433,7 +455,7 @@ export async function savePlan(profile: MemberProfile, chapterId: number, planne
   batch.set(
     planRef,
     {
-      bookId: DEFAULT_BOOK_ID,
+      bookId: bookId,
       chapterId,
       createdBy: profile.profileId,
       createdByUid: profile.uid,
@@ -449,7 +471,7 @@ export async function savePlan(profile: MemberProfile, chapterId: number, planne
     actor: profile.profileId,
     actorUid: profile.uid,
     type: activityType,
-    bookId: DEFAULT_BOOK_ID,
+    bookId: bookId,
     chapterId,
     planId: planRef.id,
     activityDate: plannedDate,
@@ -460,9 +482,9 @@ export async function savePlan(profile: MemberProfile, chapterId: number, planne
   await batch.commit()
 }
 
-export async function cancelPlan(profile: MemberProfile, planId: string, chapterId: number) {
+export async function cancelPlan(profile: MemberProfile, planId: string, chapterId: number, bookId = DEFAULT_BOOK_ID) {
   const database = requireDb()
-  const planRef = doc(database, 'books', DEFAULT_BOOK_ID, 'plans', planId)
+  const planRef = doc(database, 'books', bookId, 'plans', planId)
   const activityRef = doc(collection(database, 'activities'))
   const batch = writeBatch(database)
 
@@ -471,7 +493,7 @@ export async function cancelPlan(profile: MemberProfile, planId: string, chapter
     actor: profile.profileId,
     actorUid: profile.uid,
     type: 'reading_plan_updated',
-    bookId: DEFAULT_BOOK_ID,
+    bookId: bookId,
     chapterId,
     planId,
     activityDate: todayISO(),
@@ -482,19 +504,19 @@ export async function cancelPlan(profile: MemberProfile, planId: string, chapter
   await batch.commit()
 }
 
-export async function addComment(profile: MemberProfile, chapterId: number, text: string) {
+export async function addComment(profile: MemberProfile, chapterId: number, text: string, bookId = DEFAULT_BOOK_ID) {
   const trimmed = text.trim()
   if (!trimmed) return
 
   const database = requireDb()
-  const commentRef = doc(collection(database, 'books', DEFAULT_BOOK_ID, 'comments'))
+  const commentRef = doc(collection(database, 'books', bookId, 'comments'))
   const activityRef = doc(collection(database, 'activities'))
   const batch = writeBatch(database)
 
   batch.set(commentRef, {
     authorId: profile.uid,
     authorProfileId: profile.profileId,
-    bookId: DEFAULT_BOOK_ID,
+    bookId: bookId,
     chapterId,
     text: trimmed,
     createdAt: serverTimestamp(),
@@ -503,7 +525,7 @@ export async function addComment(profile: MemberProfile, chapterId: number, text
     actor: profile.profileId,
     actorUid: profile.uid,
     type: 'comment_added',
-    bookId: DEFAULT_BOOK_ID,
+    bookId: bookId,
     chapterId,
     commentId: commentRef.id,
     activityDate: todayISO(),
