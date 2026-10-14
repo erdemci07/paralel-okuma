@@ -281,7 +281,7 @@ export function subscribeLibrary(callback: (books: LibraryBook[]) => void, onErr
   }, onError)
 }
 
-export function subscribeWorkspace(callback: (state: WorkspaceState) => void, onStatus: (status: WorkspaceStatus) => void, bookId = bookId) {
+export function subscribeWorkspace(callback: (state: WorkspaceState) => void, onStatus: (status: WorkspaceStatus) => void, bookId = DEFAULT_BOOK_ID) {
   if (!db) {
     callback({
       book: {
@@ -392,7 +392,7 @@ export function subscribeWorkspace(callback: (state: WorkspaceState) => void, on
   return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
 }
 
-export function subscribeBookComments(callback: (comments: CommentDoc[]) => void, onError: (error: FirestoreError) => void, bookId = bookId) {
+export function subscribeBookComments(callback: (comments: CommentDoc[]) => void, onError: (error: FirestoreError) => void, bookId = DEFAULT_BOOK_ID) {
   if (!db) {
     callback([])
     return () => undefined
