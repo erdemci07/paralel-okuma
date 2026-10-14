@@ -322,7 +322,7 @@ function BookLibrary({
     <ShellFrame currentUser={currentUser} locationPath={`/${currentUser}`} showBottomNav={false}>
       <section id="book" className="panel library-panel">
         <p className="eyebrow">Paralel Okuma</p>
-        <h2>Kitaplığımız</h2>
+        <h2>Kitaplığınız</h2>
         <p className="library-intro">Okumaya devam etmek istediğiniz kitabı seçin.</p>
         <div className="library-grid">
           {sortedBooks.map((book) => (
