@@ -85,9 +85,25 @@ const insanOlmakQuotes = [
   'Kendini yaşamak, başkalarının biçtiği hayatı sürdürmekten vazgeçebilmektir.',
 ]
 
+const fillerSultaniQuotes = [
+  'Güç büyüdükçe adaletin sesi daha çok duyulmaya ihtiyaç duyar.',
+  'Küçük görülenler bazen en büyük direnişi başlatır.',
+  'Birlik olanların karşısında korku uzun süre ayakta kalamaz.',
+  'Zorbalık güçlü görünür, ama dayanışma ondan daha kalıcıdır.',
+  'İnsanı asıl büyüten şey gücü değil, vicdanıdır.',
+  'Sessiz kalabalıklar konuşmaya başladığında düzen değişir.',
+  'Korku yayılır, ama cesaret de yayılır.',
+  'Bir halkı ayakta tutan şey yalnızca öfkesi değil, umududur.',
+  'Ezilenlerin hikâyesi, direnmeye başladıkları yerde değişir.',
+  'Adalet bazen en beklenmedik yerden filiz verir.',
+  'Baskı ne kadar ağırsa özgürlük arzusu da o kadar güçlenir.',
+  'Gerçek kuvvet, başkalarını ezmekte değil, birlikte ayakta kalmaktadır.',
+]
+
 const quotesByBookId: Record<string, readonly string[]> = {
   [BOOK.id]: readingQuotes,
   'insan-olmak': insanOlmakQuotes,
+  'filler-sultani': fillerSultaniQuotes,
 }
 
 function App() {
@@ -561,7 +577,7 @@ function ReadingApp({
 
       <section className="panel">
         <div className="section-header">
-          <h3>Bölümler</h3>
+          <h3>{workspace.book.id === 'filler-sultani' ? 'Kısımlar' : 'Bölümler'}</h3>
         </div>
 
         {workspace.chapters.map((chapter) => {
