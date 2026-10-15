@@ -59,7 +59,8 @@ jobs:
         if: github.event_name != 'pull_request'
         run: node scripts/seed-filler-sultani.mjs --projectId=paralel-okuma
       - name: Deploy activity notifications
-        if: github.event_name != 'pull_request'
+        # Activate after enabling the Cloud Build API and granting deploy permissions.
+        if: github.event_name != 'pull_request' && vars.ENABLE_NOTIFICATION_DEPLOY == 'true'
         run: npx --yes firebase-tools@14 deploy --only functions:notifyOnActivity --project paralel-okuma --non-interactive
       - name: Deploy Firebase Hosting
         if: github.event_name != 'pull_request'
