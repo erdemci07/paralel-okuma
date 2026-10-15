@@ -20,7 +20,6 @@ import {
   cancelPlan,
   DEFAULT_PREFS,
   formatActivityDate,
-  registerDeviceForPush,
   savePlan,
   signInForProfile,
   signOutCurrentUser,
@@ -43,6 +42,7 @@ import type {
   WorkspaceState,
   WorkspaceStatus,
 } from './firestoreStore'
+import { registerWebPush, supportsWebPush } from './notificationClient'
 import './App.css'
 
 const tabs = [
@@ -905,6 +905,8 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     environment.isSupported &&
     (!environment.isIosSafari || environment.isStandalone) &&
     environment.notificationPermission === 'denied'
+  const shouldShowEnabledState =
+    !demoMode && Boolean(profile) && environment.notificationPermission === 'granted' && supportsWebPush()
 
   useEffect(() => {
     const media = window.matchMedia('(display-mode: standalone)')
@@ -919,6 +921,14 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     }
   }, [])
 
+  // Refresh a granted push subscription whenever the authenticated profile returns.
+  useEffect(() => {
+    if (!profile || demoMode || !supportsWebPush() || Notification.permission !== 'granted') return
+    void registerWebPush(profile).catch((error: unknown) => {
+      console.warn('Bildirim aboneliği yenilenemedi.', error)
+    })
+  }, [profile?.uid, demoMode])
+
   function dismissInstallGuide() {
     setHideInstallGuide(true)
     localStorage.setItem('hide-ios-install-guide', 'true')
@@ -928,12 +938,13 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     if (!profile || !('Notification' in window)) return
 
     try {
-      const permission = await Notification.requestPermission()
+      if (!supportsWebPush()) throw new Error('Bu cihaz bildirimleri desteklemiyor.')
+      const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
       setEnvironment({ ...getNotificationEnvironment(), notificationPermission: permission })
 
       if (permission === 'granted') {
-        await registerDeviceForPush(profile, (payload) => setMessage(payload.notification?.body ?? 'Yeni bildirim geldi.'))
-        setMessage('Bildirimler açıldı ✓')
+        await registerWebPush(profile)
+        setMessage('Bildirimler etkin ✓')
         window.setTimeout(() => setMessage(''), 2400)
         return
       }
@@ -941,8 +952,8 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
       if (permission === 'denied') {
         setMessage('Bildirimler kapalı')
       }
-    } catch {
-      setMessage('Bildirimler kapalı')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Bildirim bağlantısı kurulamadı.')
     }
   }
 
@@ -992,11 +1003,20 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     )
   }
 
+  if (shouldShowEnabledState) {
+    return (
+      <section className="panel notification-card subtle">
+        <p>🔔 {message || 'Bildirim izni açık. Faruk ve Berfin’in yeni hareketleri karşı tarafa iletilecek.'}</p>
+        <button type="button" className="primary-button" onClick={() => void enableNotifications()}>Bildirim bağlantısını yenile</button>
+      </section>
+    )
+  }
+
   if (message || shouldShowDeniedState) {
     return (
       <section className="panel notification-card subtle">
         <p>{message || 'Bildirimler kapalı'}</p>
-        {shouldShowDeniedState ? <small>iPhone ayarlarından daha sonra açabilirsiniz.</small> : null}
+        {shouldShowDeniedState ? <small>Bildirimleri cihazın tarayıcı veya uygulama ayarlarından açabilirsiniz.</small> : null}
       </section>
     )
   }

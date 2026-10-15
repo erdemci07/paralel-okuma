@@ -12,13 +12,12 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore'
-import { getToken, onMessage } from 'firebase/messaging'
 import type { Unsubscribe, User as FirebaseUser } from 'firebase/auth'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import type { DocumentData, Firestore, QueryDocumentSnapshot } from 'firebase/firestore'
 import type { FirestoreError } from 'firebase/firestore'
-import type { MessagePayload } from 'firebase/messaging'
-import { auth, db, firebaseProjectId, getFirebaseMessaging, vapidKey } from './firebase'
+import { auth, db, firebaseProjectId } from './firebase'
+import { notifyActivitySafely } from './notificationClient'
 import { BOOK, CHAPTERS, USERS, normalizeUserKey } from './data'
 import type { Book, Chapter, Status, UserKey } from './data'
 
@@ -452,6 +451,7 @@ export async function updateProgress(profile: MemberProfile, chapterId: number, 
   }
 
   await batch.commit()
+  if (statusType) notifyActivitySafely(activityRef.id)
 }
 
 export async function savePlan(profile: MemberProfile, chapterId: number, plannedDate: string, note: string, type: 'personal' | 'shared', planId?: string, bookId = DEFAULT_BOOK_ID) {
@@ -489,6 +489,7 @@ export async function savePlan(profile: MemberProfile, chapterId: number, planne
   })
 
   await batch.commit()
+  notifyActivitySafely(activityRef.id)
 }
 
 export async function cancelPlan(profile: MemberProfile, planId: string, chapterId: number, bookId = DEFAULT_BOOK_ID) {
@@ -511,6 +512,7 @@ export async function cancelPlan(profile: MemberProfile, planId: string, chapter
   })
 
   await batch.commit()
+  notifyActivitySafely(activityRef.id)
 }
 
 export async function addComment(profile: MemberProfile, chapterId: number, text: string, bookId = DEFAULT_BOOK_ID) {
@@ -543,6 +545,7 @@ export async function addComment(profile: MemberProfile, chapterId: number, text
   })
 
   await batch.commit()
+  notifyActivitySafely(activityRef.id)
 }
 
 export async function updateNotificationPrefs(profile: MemberProfile, prefs: NotificationPrefs) {
@@ -551,33 +554,6 @@ export async function updateNotificationPrefs(profile: MemberProfile, prefs: Not
     notificationPrefs: prefs,
     updatedAt: serverTimestamp(),
   })
-}
-
-export async function registerDeviceForPush(profile: MemberProfile, onForegroundMessage: (payload: MessagePayload) => void) {
-  const messaging = await getFirebaseMessaging()
-  if (!messaging || !vapidKey || !('Notification' in window) || Notification.permission !== 'granted') return null
-
-  const registration = await navigator.serviceWorker.ready
-  const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration })
-  if (!token) return null
-
-  const deviceId = token.slice(-32)
-  await setDoc(
-    doc(requireDb(), 'users', profile.uid, 'devices', deviceId),
-    {
-      token,
-      deviceId,
-      platform: navigator.userAgent,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  )
-
-  const unsubscribe = onMessage(messaging, onForegroundMessage)
-  return async () => {
-    unsubscribe()
-  }
 }
 
 export { DEFAULT_BOOK_ID }
