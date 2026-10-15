@@ -927,7 +927,7 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     void registerWebPush(profile).catch((error: unknown) => {
       console.warn('Bildirim aboneliği yenilenemedi.', error)
     })
-  }, [profile?.uid, demoMode])
+  }, [profile, demoMode])
 
   function dismissInstallGuide() {
     setHideInstallGuide(true)
