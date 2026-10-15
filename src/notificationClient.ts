@@ -1,6 +1,5 @@
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
-import type { MemberProfile } from './firestoreStore'
 
 // This endpoint only verifies the caller and relays real Firestore activity records.
 // Reading data and device subscriptions remain inside the Paralel Okuma project.
@@ -25,12 +24,17 @@ export function supportsWebPush(): boolean {
     && window.isSecureContext
 }
 
-export async function registerWebPush(profile: MemberProfile): Promise<void> {
+export async function registerWebPush(profileUid: string): Promise<void> {
   if (!supportsWebPush() || !db || Notification.permission !== 'granted') {
     throw new Error('Bu cihazda web bildirim izni açık değil.')
   }
-  const response = await fetch(NOTIFICATION_ENDPOINT, { method: 'GET', cache: 'no-store' })
-  if (!response.ok) throw new Error('Bildirim sunucusuna erişilemiyor.')
+  let response: Response
+  try {
+    response = await fetch(NOTIFICATION_ENDPOINT, { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(12000) })
+  } catch {
+    throw new Error('Bildirim sunucusuna ulaşılamadı. Bağlantınızı kontrol edin ve yeniden deneyin.')
+  }
+  if (!response.ok) throw new Error(`Bildirim sunucusu yanıt vermedi (${response.status}).`)
   const config = await response.json() as VapidResponse
   if (!config.vapidPublicKey) throw new Error('Bildirim anahtarı bulunamadı.')
 
@@ -44,10 +48,16 @@ export async function registerWebPush(profile: MemberProfile): Promise<void> {
       subscription = null
     }
   }
-  subscription ??= await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey,
-  })
+  if (!subscription) {
+    try {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      })
+    } catch {
+      throw new Error('Tarayıcı push aboneliği oluşturamadı. Edge bildirim izinlerini kontrol edin.')
+    }
+  }
   const json = subscription.toJSON()
   if (!json.endpoint || !json.keys?.auth || !json.keys.p256dh) {
     throw new Error('Cihaz bildirimi kaydedilemedi.')
@@ -55,7 +65,7 @@ export async function registerWebPush(profile: MemberProfile): Promise<void> {
   // Stable and collision-resistant document ID without exposing the endpoint in its path.
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(json.endpoint))
   const deviceId = Array.from(new Uint8Array(digest)).map((item) => item.toString(16).padStart(2, '0')).join('')
-  await setDoc(doc(db, 'users', profile.uid, 'devices', deviceId), {
+  await setDoc(doc(db, 'users', profileUid, 'devices', deviceId), {
     type: 'web_push',
     subscription: {
       endpoint: json.endpoint,
@@ -84,5 +94,19 @@ export async function notifyActivity(activityId: string): Promise<void> {
 export function notifyActivitySafely(activityId: string): void {
   void notifyActivity(activityId).catch((error: unknown) => {
     console.warn('Okuma hareketi kaydedildi, ancak bildirim iletilemedi.', error)
+  })
+}
+
+export async function showDeviceTestNotification(): Promise<void> {
+  if (!supportsWebPush() || Notification.permission !== 'granted') {
+    throw new Error('Deneme bildiriminden önce tarayıcı bildirimlerine izin verin.')
+  }
+  const registration = await navigator.serviceWorker.ready
+  await registration.showNotification('Paralel Okuma 📚', {
+    body: 'Deneme bildirimi: Bu cihazın bildirim görüntüleme özelliği çalışıyor.',
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
+    tag: 'paralel-okuma-local-test',
+    data: { link: '/' },
   })
 }

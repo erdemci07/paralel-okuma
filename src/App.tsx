@@ -42,7 +42,7 @@ import type {
   WorkspaceState,
   WorkspaceStatus,
 } from './firestoreStore'
-import { registerWebPush, supportsWebPush } from './notificationClient'
+import { registerWebPush, showDeviceTestNotification, supportsWebPush } from './notificationClient'
 import './App.css'
 
 const tabs = [
@@ -887,6 +887,9 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
   const [environment, setEnvironment] = useState(() => getNotificationEnvironment())
   const [hideInstallGuide, setHideInstallGuide] = useState(() => localStorage.getItem('hide-ios-install-guide') === 'true')
   const [message, setMessage] = useState('')
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [connected, setConnected] = useState(false)
   const shouldShowInstallGuide =
     !demoMode &&
     Boolean(profile) &&
@@ -921,13 +924,24 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     }
   }, [])
 
-  // Refresh a granted push subscription whenever the authenticated profile returns.
+  // A subscription may be lost or rotated by the browser; restore it on sign-in.
+  const profileUid = profile?.uid
   useEffect(() => {
-    if (!profile || demoMode || !supportsWebPush() || Notification.permission !== 'granted') return
-    void registerWebPush(profile).catch((error: unknown) => {
-      console.warn('Bildirim aboneliği yenilenemedi.', error)
+    if (!profileUid || demoMode || !supportsWebPush() || Notification.permission !== 'granted') return
+    let cancelled = false
+    void registerWebPush(profileUid).then(() => {
+      if (!cancelled) {
+        setConnected(true)
+        setMessage('Cihaz bildirime bağlı ✓')
+      }
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setConnected(false)
+        setMessage(error instanceof Error ? error.message : 'Bildirim aboneliği kurulamadı.')
+      }
     })
-  }, [profile, demoMode])
+    return () => { cancelled = true }
+  }, [profileUid, demoMode])
 
   function dismissInstallGuide() {
     setHideInstallGuide(true)
@@ -935,25 +949,36 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
   }
 
   async function enableNotifications() {
-    if (!profile || !('Notification' in window)) return
-
+    if (!profile || !('Notification' in window) || isConnecting) return
+    setIsConnecting(true)
+    setMessage('Bildirim bağlantısı kontrol ediliyor…')
     try {
-      if (!supportsWebPush()) throw new Error('Bu cihaz bildirimleri desteklemiyor.')
+      if (!supportsWebPush()) throw new Error('Bu cihaz web bildirimlerini desteklemiyor.')
       const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
-      setEnvironment({ ...getNotificationEnvironment(), notificationPermission: permission })
-
-      if (permission === 'granted') {
-        await registerWebPush(profile)
-        setMessage('Bildirimler etkin ✓')
-        window.setTimeout(() => setMessage(''), 2400)
-        return
-      }
-
-      if (permission === 'denied') {
-        setMessage('Bildirimler kapalı')
-      }
+      setEnvironment(getNotificationEnvironment())
+      if (permission === 'denied') throw new Error('Bildirim izni kapalı. Tarayıcı ayarlarından izin verin.')
+      if (permission !== 'granted') throw new Error('Bildirim izni verilmedi.')
+      await registerWebPush(profile.uid)
+      setConnected(true)
+      setMessage('Cihazınız başarıyla bağlandı ✓')
     } catch (error) {
+      setConnected(false)
       setMessage(error instanceof Error ? error.message : 'Bildirim bağlantısı kurulamadı.')
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  async function testDeviceNotification() {
+    if (isTesting) return
+    setIsTesting(true)
+    try {
+      await showDeviceTestNotification()
+      setMessage('Deneme bildirimi istendi. Edge ve Windows bildirimlerini kontrol edin.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Deneme bildirimi gösterilemedi.')
+    } finally {
+      setIsTesting(false)
     }
   }
 
@@ -974,7 +999,7 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
             </li>
             <li>Ekledikten sonra ana ekrandaki “Paralel Okuma” simgesinden uygulamayı açın.</li>
           </ol>
-          <p className="helper-text">Böylece uygulama kapalıyken de Faruk ve Berfin’in okuma hareketlerinden bildirim alabilirsiniz.</p>
+          <p className="helper-text">Böylece uygulama kapalıyken de okuma hareketleriniz karşı tarafa bildirim olarak iletilir.</p>
           <div className="ios-guide-controls">
             <label className="toggle-item">
               <input
@@ -996,8 +1021,8 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     return (
       <section className="panel notification-card">
         <h3>Bildirimleri aç 🔔</h3>
-        <p>Faruk ve Berfin’in okuma hareketlerinden anında haberdar olun.</p>
-        <button type="button" className="primary-button" onClick={() => void enableNotifications()}>Bildirimleri aç</button>
+        <p>Okuma hareketleriniz karşı tarafa bildirim olarak iletilir.</p>
+        <button type="button" className="primary-button" onClick={() => void enableNotifications()} disabled={isConnecting}>{isConnecting ? "Bağlanıyor…" : "Bildirimleri aç"}</button>
         {message ? <p className="helper-text">{message}</p> : null}
       </section>
     )
@@ -1005,9 +1030,14 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
 
   if (shouldShowEnabledState) {
     return (
-      <section className="panel notification-card subtle">
-        <p>🔔 {message || 'Bildirim izni açık. Faruk ve Berfin’in yeni hareketleri karşı tarafa iletilecek.'}</p>
-        <button type="button" className="primary-button" onClick={() => void enableNotifications()}>Bildirim bağlantısını yenile</button>
+      <section className="panel notification-card subtle" aria-live="polite">
+        <p>🔔 Okuma hareketleriniz karşı tarafa bildirim olarak iletilir.</p>
+        <p className="helper-text">{message || (connected ? 'Cihaz bildirime bağlı ✓' : 'Bildirim izni açık; cihaz bağlantısı kontrol edilmeli.')}</p>
+        <div className="notification-actions">
+          <button type="button" className="primary-button" disabled={isConnecting} onClick={() => void enableNotifications()}>{isConnecting ? 'Kontrol ediliyor…' : 'Bildirim bağlantısını yenile'}</button>
+          <button type="button" className="secondary-button" disabled={isTesting || isConnecting} onClick={() => void testDeviceNotification()}>{isTesting ? 'Gösteriliyor…' : 'Bu cihazda dene'}</button>
+        </div>
+        <small>Deneme bildirimi yalnızca bu cihazda görüntülenir; karşı tarafa bildirim göndermek için diğer hesaptan bir okuma hareketi oluşturun.</small>
       </section>
     )
   }
