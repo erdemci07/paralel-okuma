@@ -23,39 +23,16 @@
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--accent), #b7835f);
+  background: #f8f3ee;
   display: grid;
   place-items: center;
   box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
-.book-mark {
-  position: relative;
-  width: 22px;
-  height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.95);
-  border-radius: 3px 7px 7px 3px;
-}
-
-.book-mark::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: 8px;
-  width: 2px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.85);
-}
-
-.book-mark::after {
-  content: '';
-  position: absolute;
-  right: 3px;
-  bottom: 4px;
-  width: 7px;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
+.brand-badge img {
+  width: 100%;
+  height: 100%;
 }
 
 .eyebrow {
@@ -554,26 +531,105 @@ select {
 }
 
 .notification-card {
+  padding: 0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.notification-summary {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-bell {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.notification-bell svg {
+  width: 21px;
+  height: 21px;
+}
+
+.notification-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+}
+
+.notification-status {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.notification-status.is-active {
+  color: #35734a;
+}
+
+.notification-chevron {
+  color: var(--muted);
+  font-size: 1.1rem;
+  text-align: right;
+}
+
+.notification-settings {
   display: grid;
   gap: 10px;
-  border-radius: 16px;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border);
 }
 
-.notification-card h3 {
-  font-size: 1.05rem;
+.notification-settings > :first-child {
+  margin-top: 12px;
 }
 
-.notification-card p,
-.notification-card small {
+.notification-settings p,
+.notification-settings small {
   color: var(--muted);
 }
 
-.notification-card .primary-button {
+.notification-settings .primary-button {
   justify-self: start;
 }
 
-.notification-card.subtle {
-  padding: 12px 14px;
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.text-button {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-help {
+  padding: 10px;
+  border-radius: 10px;
+  background: #f8f0e8;
+  font-size: 0.86rem;
 }
 
 .ios-guide-backdrop {

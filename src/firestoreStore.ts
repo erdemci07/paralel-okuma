@@ -148,11 +148,11 @@ function statusActivityType(status: Status) {
   return 'status_reset'
 }
 
-function progressActivityText(userId: UserKey, status: Status, chapterId: number, activityDate: string) {
+function progressActivityText(userId: UserKey, status: Status, chapterId: number, bookTitle?: string) {
   const name = USERS[userId].name
-  const dateText = formatActivityDate(activityDate)
-  if (status === 'reading') return `${name} ${chapterId}. bölümü ${dateText} okumaya başladı.`
-  if (status === 'completed') return `${name} ${chapterId}. bölümü ${dateText} tamamladı.`
+  const chapter = bookTitle ? `${bookTitle} kitabının ${chapterId}. bölümünü` : `${chapterId}. bölümü`
+  if (status === 'reading') return `${name}, ${chapter} okumaya başladı.`
+  if (status === 'completed') return `${name}, ${chapter} tamamladı.`
   return `${name} ${chapterId}. bölüm durumunu sıfırladı.`
 }
 
@@ -412,7 +412,7 @@ export function subscribeBookComments(callback: (comments: CommentDoc[]) => void
   )
 }
 
-export async function updateProgress(profile: MemberProfile, chapterId: number, status: Status, activityDate: string, bookId = DEFAULT_BOOK_ID) {
+export async function updateProgress(profile: MemberProfile, chapterId: number, status: Status, activityDate: string, bookId = DEFAULT_BOOK_ID, bookTitle?: string) {
   const database = requireDb()
   const progressId = `${profile.uid}_${chapterId}`
   const progressRef = doc(database, 'books', bookId, 'progress', progressId)
@@ -445,7 +445,7 @@ export async function updateProgress(profile: MemberProfile, chapterId: number, 
       chapterId,
       activityDate,
       createdAt: serverTimestamp(),
-      text: progressActivityText(profile.profileId, status, chapterId, activityDate),
+      text: progressActivityText(profile.profileId, status, chapterId, bookTitle),
     })
   }
 

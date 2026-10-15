@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Paralel Okuma">
+  <rect width="512" height="512" rx="112" fill="#f8f3ee"/>
+  <path d="M82 145c67-20 123-7 174 39v218c-48-46-106-59-174-39V145Z" fill="#fffdf9" stroke="#8f5b39" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M430 145c-67-20-123-7-174 39v218c48-46 106-59 174-39V145Z" fill="#f4e6d8" stroke="#8f5b39" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M132 211c38-8 69 1 96 27M132 270c38-8 69 1 96 27M380 211c-38-8-69 1-96 27M380 270c-38-8-69 1-96 27" fill="none" stroke="#c58d68" stroke-width="16" stroke-linecap="round"/>
+  <path d="M256 184v218" stroke="#6e432a" stroke-width="18" stroke-linecap="round"/>
+</svg>

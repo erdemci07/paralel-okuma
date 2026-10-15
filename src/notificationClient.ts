@@ -55,7 +55,7 @@ export async function registerWebPush(profileUid: string): Promise<void> {
         applicationServerKey,
       })
     } catch {
-      throw new Error('Tarayıcı push aboneliği oluşturamadı. Edge bildirim izinlerini kontrol edin.')
+      throw new Error('Tarayıcı push aboneliği oluşturamadı. Bildirim izinlerini kontrol edin.')
     }
   }
   const json = subscription.toJSON()
@@ -102,10 +102,10 @@ export async function showDeviceTestNotification(): Promise<void> {
     throw new Error('Deneme bildiriminden önce tarayıcı bildirimlerine izin verin.')
   }
   const registration = await navigator.serviceWorker.ready
-  await registration.showNotification('Paralel Okuma 📚', {
+  await registration.showNotification('Paralel Okuma', {
     body: 'Deneme bildirimi: Bu cihazın bildirim görüntüleme özelliği çalışıyor.',
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
     tag: 'paralel-okuma-local-test',
     data: { link: '/' },
   })

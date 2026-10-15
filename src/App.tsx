@@ -489,7 +489,7 @@ function ShellFrame({
       <header className="topbar">
         <div className="brand-wrap">
           <div className="brand-badge" aria-hidden="true">
-            <span className="book-mark" />
+            <img src="/icon.svg" alt="" />
           </div>
           <div>
             <p className="eyebrow">Paralel Okuma</p>
@@ -593,6 +593,7 @@ function ReadingApp({
               key={`${chapter.id}-${currentStatus}-${otherStatus}-${currentProgressDate ?? ''}-${plan?.plannedDate ?? ''}-${plan?.type ?? ''}`}
               chapter={chapter}
               bookId={workspace.book.id}
+              bookTitle={workspace.book.title}
               plan={plan}
               currentUser={currentUser}
               otherUser={otherUser}
@@ -628,6 +629,7 @@ function MiniProgress({ user, completed, total }: { user: UserKey; completed: nu
 function ChapterCard({
   chapter,
   bookId,
+  bookTitle,
   plan,
   currentUser,
   otherUser,
@@ -642,6 +644,7 @@ function ChapterCard({
 }: {
   chapter: typeof CHAPTERS[number]
   bookId: string
+  bookTitle: string
   plan?: PlanDoc
   currentUser: UserKey
   otherUser: UserKey
@@ -669,7 +672,7 @@ function ChapterCard({
     const nextActivityDate = currentStatus === 'completed' && status !== 'completed' ? todayDateValue() : activityDate
     setActivityDate(nextActivityDate)
     try {
-      await updateProgress(profile, chapter.id, status, nextActivityDate, bookId)
+      await updateProgress(profile, chapter.id, status, nextActivityDate, bookId, bookTitle)
     } catch {
       setError('Durum kaydedilemedi.')
     }
@@ -890,26 +893,15 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
   const [isConnecting, setIsConnecting] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
   const [connected, setConnected] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const shouldShowInstallGuide =
     !demoMode &&
     Boolean(profile) &&
     environment.isIosSafari &&
     !environment.isStandalone &&
+    environment.notificationPermission !== 'granted' &&
     !hideInstallGuide
-  const shouldShowPermissionCard =
-    !demoMode &&
-    Boolean(profile) &&
-    environment.isSupported &&
-    (!environment.isIosSafari || environment.isStandalone) &&
-    environment.notificationPermission === 'default'
-  const shouldShowDeniedState =
-    !demoMode &&
-    Boolean(profile) &&
-    environment.isSupported &&
-    (!environment.isIosSafari || environment.isStandalone) &&
-    environment.notificationPermission === 'denied'
-  const shouldShowEnabledState =
-    !demoMode && Boolean(profile) && environment.notificationPermission === 'granted' && supportsWebPush()
 
   useEffect(() => {
     const media = window.matchMedia('(display-mode: standalone)')
@@ -932,12 +924,10 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     void registerWebPush(profileUid).then(() => {
       if (!cancelled) {
         setConnected(true)
-        setMessage('Cihaz bildirime bağlı ✓')
       }
-    }).catch((error: unknown) => {
+    }).catch(() => {
       if (!cancelled) {
         setConnected(false)
-        setMessage(error instanceof Error ? error.message : 'Bildirim aboneliği kurulamadı.')
       }
     })
     return () => { cancelled = true }
@@ -974,7 +964,7 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     setIsTesting(true)
     try {
       await showDeviceTestNotification()
-      setMessage('Deneme bildirimi istendi. Edge ve Windows bildirimlerini kontrol edin.')
+      setMessage('Deneme bildirimi bu cihazda gösterildi.')
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Deneme bildirimi gösterilemedi.')
     } finally {
@@ -1017,41 +1007,51 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
     )
   }
 
-  if (shouldShowPermissionCard) {
-    return (
-      <section className="panel notification-card">
-        <h3>Bildirimleri aç 🔔</h3>
-        <p>Okuma hareketleriniz karşı tarafa bildirim olarak iletilir.</p>
-        <button type="button" className="primary-button" onClick={() => void enableNotifications()} disabled={isConnecting}>{isConnecting ? "Bağlanıyor…" : "Bildirimleri aç"}</button>
-        {message ? <p className="helper-text">{message}</p> : null}
-      </section>
-    )
-  }
+  if (demoMode || !profile) return null
 
-  if (shouldShowEnabledState) {
-    return (
-      <section className="panel notification-card subtle" aria-live="polite">
-        <p>🔔 Okuma hareketleriniz karşı tarafa bildirim olarak iletilir.</p>
-        <p className="helper-text">{message || (connected ? 'Cihaz bildirime bağlı ✓' : 'Bildirim izni açık; cihaz bağlantısı kontrol edilmeli.')}</p>
-        <div className="notification-actions">
-          <button type="button" className="primary-button" disabled={isConnecting} onClick={() => void enableNotifications()}>{isConnecting ? 'Kontrol ediliyor…' : 'Bildirim bağlantısını yenile'}</button>
-          <button type="button" className="secondary-button" disabled={isTesting || isConnecting} onClick={() => void testDeviceNotification()}>{isTesting ? 'Gösteriliyor…' : 'Bu cihazda dene'}</button>
+  const permissionAvailable = supportsWebPush() && (!environment.isIosSafari || environment.isStandalone)
+  const status = !permissionAvailable || environment.notificationPermission === 'denied'
+    ? 'Kapalı'
+    : environment.notificationPermission !== 'granted'
+      ? 'İzin gerekli'
+      : connected
+        ? 'Aktif'
+        : 'Kontrol ediliyor'
+
+  return (
+    <section className="panel notification-card" aria-live="polite">
+      <button
+        type="button"
+        className="notification-summary"
+        onClick={() => setIsExpanded((value) => !value)}
+        aria-expanded={isExpanded}
+        aria-controls="notification-settings"
+      >
+        <span className="notification-bell" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M18 10a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 22h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+        <span className="notification-title">Bildirimler</span>
+        <span className={`notification-status ${status === 'Aktif' ? 'is-active' : ''}`}>{status}</span>
+        <span className="notification-chevron" aria-hidden="true">{isExpanded ? '⌃' : '⌄'}</span>
+      </button>
+      {isExpanded ? (
+        <div id="notification-settings" className="notification-settings">
+          <p>Okuma hareketleri, bildirim izni veren diğer kullanıcıya iletilir.</p>
+          {status === 'İzin gerekli' ? <button type="button" className="primary-button" onClick={() => void enableNotifications()} disabled={isConnecting}>{isConnecting ? 'Bağlanıyor…' : 'Bildirim izni ver'}</button> : null}
+          {status === 'Kapalı' ? <p className="helper-text">Bildirim görünmüyorsa cihazınızın ve tarayıcınızın bildirim izinlerini kontrol edin.</p> : null}
+          {permissionAvailable && environment.notificationPermission === 'granted' ? (
+            <div className="notification-actions">
+              <button type="button" className="secondary-button" disabled={isTesting || isConnecting} onClick={() => void testDeviceNotification()}>{isTesting ? 'Gösteriliyor…' : 'Bu cihazda dene'}</button>
+              <button type="button" className="primary-button" disabled={isConnecting} onClick={() => void enableNotifications()}>{isConnecting ? 'Yenileniyor…' : 'Bildirim bağlantısını yenile'}</button>
+            </div>
+          ) : null}
+          {permissionAvailable && environment.notificationPermission === 'granted' ? <small>Deneme bildirimi yalnızca bu cihazda gösterilir.</small> : null}
+          {permissionAvailable && environment.notificationPermission === 'granted' ? <small>Bu cihazın bildirim bağlantısını yeniden kaydeder.</small> : null}
+          <button type="button" className="text-button" onClick={() => setShowHelp((value) => !value)} aria-expanded={showHelp}>{showHelp ? 'Yardımı gizle' : 'Nasıl çalışır?'}</button>
+          {showHelp ? <p className="notification-help">Okuma hareketleri tercihleri açık olan diğer kullanıcıya iletilir. Bildirim görünmüyorsa cihazınızın ve tarayıcınızın bildirim izinlerini kontrol edin.</p> : null}
+          {message ? <p className="helper-text">{message}</p> : null}
         </div>
-        <small>Deneme bildirimi yalnızca bu cihazda görüntülenir; karşı tarafa bildirim göndermek için diğer hesaptan bir okuma hareketi oluşturun.</small>
-      </section>
-    )
-  }
-
-  if (message || shouldShowDeniedState) {
-    return (
-      <section className="panel notification-card subtle">
-        <p>{message || 'Bildirimler kapalı'}</p>
-        {shouldShowDeniedState ? <small>Bildirimleri cihazın tarayıcı veya uygulama ayarlarından açabilirsiniz.</small> : null}
-      </section>
-    )
-  }
-
-  return null
+      ) : null}
+    </section>
+  )
 }
 
 function IosStepImage({ src, alt, fallback }: { src: string; alt: string; fallback: 'share' | 'add' }) {

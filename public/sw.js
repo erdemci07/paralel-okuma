@@ -26,8 +26,8 @@ self.addEventListener('push', (event) => {
   const title = payload.notification?.title || payload.title || 'Paralel Okuma'
   const options = {
     body: payload.notification?.body || payload.body || '',
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/badge-72.png',
     data: payload.data || {},
   }
 
