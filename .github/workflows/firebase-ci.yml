@@ -58,6 +58,9 @@ jobs:
       - name: Add Filler Sultanı (preserve existing records)
         if: github.event_name != 'pull_request'
         run: node scripts/seed-filler-sultani.mjs --projectId=paralel-okuma
+      - name: Deploy activity notifications
+        if: github.event_name != 'pull_request'
+        run: npx --yes firebase-tools@14 deploy --only functions:notifyOnActivity --project paralel-okuma --non-interactive
       - name: Deploy Firebase Hosting
         if: github.event_name != 'pull_request'
         run: npx --yes firebase-tools@14 deploy --only hosting --project paralel-okuma --non-interactive
