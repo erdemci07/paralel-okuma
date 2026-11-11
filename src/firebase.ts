@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from 'firebase/app'
 import type { FirebaseApp } from 'firebase/app'
-import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth'
+import { Capacitor } from '@capacitor/core'
+import { getAuth, initializeAuth, indexedDBLocalPersistence, setPersistence, browserLocalPersistence } from 'firebase/auth'
 import type { Auth } from 'firebase/auth'
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
@@ -30,9 +31,17 @@ export const firebaseApp: FirebaseApp | null = isFirebaseConfigured
   ? getApps()[0] ?? initializeApp(firebaseConfig)
   : null
 
-export const auth: Auth | null = firebaseApp ? getAuth(firebaseApp) : null
+// iOS WKWebView'da getAuth() popup/redirect çözücüsünü yüklemeye çalışıp
+// oturum durumunu hiç bildirmeyebiliyor; native'de doğrudan IndexedDB kalıcılığıyla başlat.
+const isNative = Capacitor.isNativePlatform()
 
-if (auth) {
+export const auth: Auth | null = firebaseApp
+  ? isNative
+    ? initializeAuth(firebaseApp, { persistence: indexedDBLocalPersistence })
+    : getAuth(firebaseApp)
+  : null
+
+if (auth && !isNative) {
   setPersistence(auth, browserLocalPersistence).catch(() => {
     // Auth still works with the SDK default if local persistence is unavailable.
   })

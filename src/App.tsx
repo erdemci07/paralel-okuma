@@ -43,6 +43,8 @@ import type {
   WorkspaceStatus,
 } from './firestoreStore'
 import { registerWebPush, showDeviceTestNotification, supportsWebPush } from './notificationClient'
+import { isNativeApp, nativePermissionState, registerNativePush, requestNativePermission } from './nativePush'
+import type { NativePermission } from './nativePush'
 import './App.css'
 
 const tabs = [
@@ -170,6 +172,12 @@ function ProfilePage() {
       setProfileError(mapFirestoreError(error))
     })
   }, [firebaseUser])
+
+  // Uygulamada adres çubuğu yok; açılışta oturumdaki kişinin kendi sayfasına geç.
+  useEffect(() => {
+    if (!isNativeApp || !profile?.isMember || profile.profileId === currentUser) return
+    navigate({ pathname: `/${profile.profileId}`, search: location.search, hash: location.hash }, { replace: true })
+  }, [profile, currentUser, navigate, location.search, location.hash])
 
   useEffect(() => {
     if (!profile?.isMember || profile.profileId !== currentUser) return
@@ -895,7 +903,9 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
   const [connected, setConnected] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [nativePermission, setNativePermission] = useState<NativePermission | 'checking'>(isNativeApp ? 'checking' : 'denied')
   const shouldShowInstallGuide =
+    !isNativeApp &&
     !demoMode &&
     Boolean(profile) &&
     environment.isIosSafari &&
@@ -919,7 +929,33 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
   // A subscription may be lost or rotated by the browser; restore it on sign-in.
   const profileUid = profile?.uid
   useEffect(() => {
-    if (!profileUid || demoMode || !supportsWebPush() || Notification.permission !== 'granted') return
+    if (!isNativeApp || !profileUid || demoMode) return
+    let cancelled = false
+    const sync = () => {
+      void nativePermissionState().then(async (state) => {
+        if (cancelled) return
+        setNativePermission(state)
+        if (state !== 'granted') {
+          setConnected(false)
+          return
+        }
+        await registerNativePush(profileUid)
+        if (!cancelled) setConnected(true)
+      }).catch(() => {
+        if (!cancelled) setConnected(false)
+      })
+    }
+    sync()
+    // Kullanıcı ayarlardan izni değiştirip geri dönebilir.
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', sync)
+    }
+  }, [profileUid, demoMode])
+
+  useEffect(() => {
+    if (isNativeApp || !profileUid || demoMode || !supportsWebPush() || Notification.permission !== 'granted') return
     let cancelled = false
     void registerWebPush(profileUid).then(() => {
       if (!cancelled) {
@@ -939,6 +975,26 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
   }
 
   async function enableNotifications() {
+    if (isNativeApp) {
+      if (!profile || isConnecting) return
+      setIsConnecting(true)
+      setMessage('Bildirim bağlantısı kontrol ediliyor…')
+      try {
+        const current = await nativePermissionState()
+        const state = current === 'granted' ? current : await requestNativePermission()
+        setNativePermission(state)
+        if (state !== 'granted') throw new Error('Bildirim izni verilmedi. Telefon ayarlarından Paralel Okuma için bildirimlere izin verin.')
+        await registerNativePush(profile.uid)
+        setConnected(true)
+        setMessage('Cihazınız başarıyla bağlandı ✓')
+      } catch (error) {
+        setConnected(false)
+        setMessage(error instanceof Error ? error.message : 'Bildirim bağlantısı kurulamadı.')
+      } finally {
+        setIsConnecting(false)
+      }
+      return
+    }
     if (!profile || !('Notification' in window) || isConnecting) return
     setIsConnecting(true)
     setMessage('Bildirim bağlantısı kontrol ediliyor…')
@@ -1009,10 +1065,13 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
 
   if (demoMode || !profile) return null
 
-  const permissionAvailable = supportsWebPush() && (!environment.isIosSafari || environment.isStandalone)
-  const status = !permissionAvailable || environment.notificationPermission === 'denied'
+  const permissionAvailable = isNativeApp || (supportsWebPush() && (!environment.isIosSafari || environment.isStandalone))
+  const effectivePermission = isNativeApp
+    ? (nativePermission === 'prompt' ? 'default' : nativePermission === 'checking' ? 'granted' : nativePermission)
+    : environment.notificationPermission
+  const status = !permissionAvailable || effectivePermission === 'denied'
     ? 'Kapalı'
-    : environment.notificationPermission !== 'granted'
+    : effectivePermission !== 'granted'
       ? 'İzin gerekli'
       : connected
         ? 'Aktif'
@@ -1037,14 +1096,14 @@ function NotificationSetup({ profile, demoMode }: { profile: MemberProfile | nul
           <p>Okuma hareketleri, bildirim izni veren diğer kullanıcıya iletilir.</p>
           {status === 'İzin gerekli' ? <button type="button" className="primary-button" onClick={() => void enableNotifications()} disabled={isConnecting}>{isConnecting ? 'Bağlanıyor…' : 'Bildirim izni ver'}</button> : null}
           {status === 'Kapalı' ? <p className="helper-text">Bildirim görünmüyorsa cihazınızın ve tarayıcınızın bildirim izinlerini kontrol edin.</p> : null}
-          {permissionAvailable && environment.notificationPermission === 'granted' ? (
+          {permissionAvailable && effectivePermission === 'granted' ? (
             <div className="notification-actions">
-              <button type="button" className="secondary-button" disabled={isTesting || isConnecting} onClick={() => void testDeviceNotification()}>{isTesting ? 'Gösteriliyor…' : 'Bu cihazda dene'}</button>
+              {isNativeApp ? null : <button type="button" className="secondary-button" disabled={isTesting || isConnecting} onClick={() => void testDeviceNotification()}>{isTesting ? 'Gösteriliyor…' : 'Bu cihazda dene'}</button>}
               <button type="button" className="primary-button" disabled={isConnecting} onClick={() => void enableNotifications()}>{isConnecting ? 'Yenileniyor…' : 'Bildirim bağlantısını yenile'}</button>
             </div>
           ) : null}
-          {permissionAvailable && environment.notificationPermission === 'granted' ? <small>Deneme bildirimi yalnızca bu cihazda gösterilir.</small> : null}
-          {permissionAvailable && environment.notificationPermission === 'granted' ? <small>Bu cihazın bildirim bağlantısını yeniden kaydeder.</small> : null}
+          {!isNativeApp && permissionAvailable && effectivePermission === 'granted' ? <small>Deneme bildirimi yalnızca bu cihazda gösterilir.</small> : null}
+          {permissionAvailable && effectivePermission === 'granted' ? <small>Bu cihazın bildirim bağlantısını yeniden kaydeder.</small> : null}
           <button type="button" className="text-button" onClick={() => setShowHelp((value) => !value)} aria-expanded={showHelp}>{showHelp ? 'Yardımı gizle' : 'Nasıl çalışır?'}</button>
           {showHelp ? <p className="notification-help">Okuma hareketleri tercihleri açık olan diğer kullanıcıya iletilir. Bildirim görünmüyorsa cihazınızın ve tarayıcınızın bildirim izinlerini kontrol edin.</p> : null}
           {message ? <p className="helper-text">{message}</p> : null}

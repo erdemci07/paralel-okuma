@@ -148,6 +148,40 @@ npm run build
 npx firebase deploy
 ```
 
+## iOS ve Android (Capacitor)
+
+Aynı React kodu Capacitor ile native uygulama olarak paketlenir (`android/`, `ios/`).
+Web'deki her şey aynı çalışır; tek fark bildirimlerdir: uygulama içindeki WebView'da
+Service Worker / Web Push yoktur, bu yüzden native tarafta bildirimler **FCM** ile gelir
+(Android: FCM, iOS: APNs → FCM). Cihaz kaydı `users/{uid}/devices/{installId}` altına
+`{ type: 'fcm', token, platform }` olarak yazılır. Web cihazları `type: 'web_push'` olarak kalır.
+
+### Bir kerelik Firebase/Apple adımları
+
+1. Firebase Console → Project settings → **Android uygulaması ekle**, package name: `com.paralelokuma.app`.
+   `google-services.json` dosyasını `android/app/` içine koy.
+2. Firebase Console → **iOS uygulaması ekle**, Bundle ID: `com.paralelokuma.app`.
+   `GoogleService-Info.plist` dosyasını Xcode'da `App/App` grubuna sürükle (Copy items + App target işaretli).
+3. Apple Developer → Keys → **APNs Auth Key (.p8)** oluştur; Firebase Console → Cloud Messaging →
+   Apple app configuration bölümüne yükle (Key ID + Team ID).
+4. Xcode → App target → Signing & Capabilities: kendi Team'ini seç. Push Notifications ve
+   Background Modes → Remote notifications yetkileri `App.entitlements` / `Info.plist` ile hazır.
+   App Store / TestFlight build'inde `aps-environment` Xcode tarafından `production` yapılır.
+5. Native cihazlara gönderim için sunucu tarafı: ya `functions/` içindeki `notifyOnActivity`
+   fonksiyonunu deploy et (Blaze gerekir), ya da mevcut bildirim relay'ine (`paralelNotifications`)
+   `type: 'fcm'` cihazlarına `admin.messaging().sendEachForMulticast` ile gönderim ekle
+   (`functions/index.js` içindeki `sendToProfile` hazır örnek). Web Push gönderimi relay'de kalır;
+   ikisi farklı cihaz tiplerini hedeflediği için çift bildirim oluşmaz.
+
+### Build
+
+```bash
+npm run android   # build + sync + Android Studio'yu açar → Run / Build APK/AAB
+npm run ios       # build + sync + Xcode'u açar (macOS gerekir) → Run / Archive
+```
+
+Web kodunda değişiklik yaptıktan sonra `npm run mobile:sync` yeterli. `.env` dosyası web ile aynıdır.
+
 ## Verification
 
 Before deployment:

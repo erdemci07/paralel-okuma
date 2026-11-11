@@ -1,5 +1,7 @@
+import { CapacitorHttp } from '@capacitor/core'
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { auth, db } from './firebase'
+import { isNativeApp } from './nativePush'
 
 // This endpoint only verifies the caller and relays real Firestore activity records.
 // Reading data and device subscriptions remain inside the Paralel Okuma project.
@@ -17,7 +19,8 @@ function decodeBase64Url(encoded: string): Uint8Array<ArrayBuffer> {
 }
 
 export function supportsWebPush(): boolean {
-  return typeof window !== 'undefined'
+  return !isNativeApp
+    && typeof window !== 'undefined'
     && 'Notification' in window
     && 'serviceWorker' in navigator
     && 'PushManager' in window
@@ -81,6 +84,19 @@ export async function notifyActivity(activityId: string): Promise<void> {
   const user = auth?.currentUser
   if (!user) return
   const token = await user.getIdToken()
+  if (isNativeApp) {
+    // Uygulamanın origin'i (capacitor://localhost, https://localhost) relay'in CORS
+    // listesinde olmayabilir; isteği native HTTP katmanından gönder.
+    const nativeResponse = await CapacitorHttp.post({
+      url: NOTIFICATION_ENDPOINT,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      data: { activityId },
+    })
+    if (nativeResponse.status < 200 || nativeResponse.status >= 300) {
+      throw new Error(`Bildirim sunucusu: ${nativeResponse.status}`)
+    }
+    return
+  }
   const response = await fetch(NOTIFICATION_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
