@@ -45,22 +45,37 @@ async function memberProfilesExcept(actorUid) {
     .map((doc) => ({ uid: doc.id, ...doc.data() }))
 }
 
-async function sendToProfile(profile, payload, prefKey) {
+// iOS/Android uygulamasının (Capacitor) kaydettiği cihazlar: users/{uid}/devices/{id}
+// { type: 'fcm', token, platform: 'ios' | 'android' }.
+// Web cihazları (type: 'web_push') harici relay üzerinden Web Push ile gönderilir;
+// burada yalnızca FCM token'lı native cihazlar hedeflenir, böylece çift bildirim olmaz.
+function isNativeDevice(data) {
+  return Boolean(data?.token) && (data.type === 'fcm' || !data.type)
+}
+
+export async function sendToProfile(profile, payload, prefKey) {
   const prefs = profile.notificationPrefs ?? {}
   if (prefKey && prefs[prefKey] === false) return
 
   const devices = await db.collection('users').doc(profile.uid).collection('devices').get()
-  const tokens = devices.docs.map((doc) => doc.data().token).filter(Boolean)
-  if (!tokens.length) return
+  const targets = devices.docs.filter((doc) => isNativeDevice(doc.data()))
+  if (!targets.length) return
+
+  const data = Object.fromEntries(
+    Object.entries(payload.data ?? {}).map(([key, value]) => [key, String(value ?? '')]),
+  )
 
   const response = await admin.messaging().sendEachForMulticast({
-    tokens,
+    tokens: targets.map((doc) => doc.data().token),
     notification: payload.notification,
-    data: payload.data,
-    webpush: {
-      fcmOptions: {
-        link: payload.data?.link ?? '/',
-      },
+    data,
+    android: {
+      priority: 'high',
+      notification: { sound: 'default' },
+    },
+    apns: {
+      headers: { 'apns-priority': '10' },
+      payload: { aps: { sound: 'default' } },
     },
   })
 
@@ -69,7 +84,7 @@ async function sendToProfile(profile, payload, prefKey) {
       if (result.success) return null
       const code = result.error?.code ?? ''
       if (!code.includes('registration-token-not-registered') && !code.includes('invalid-registration-token')) return null
-      return devices.docs[index].ref.delete()
+      return targets[index].ref.delete()
     }),
   )
 }

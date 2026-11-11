@@ -25,3 +25,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Capacitor iOS SPM symlink'leri (npx cap sync yeniden oluşturur)
+ios/App/CapApp-SPM/symlinks/

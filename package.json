@@ -10,9 +10,17 @@
     "preview": "vite preview",
     "seed": "node scripts/seed.mjs",
     "bind:user": "node scripts/bind-user.mjs",
-    "bind-users": "node scripts/bind-users.mjs"
+    "bind-users": "node scripts/bind-users.mjs",
+    "mobile:sync": "npm run build && npx cap sync",
+    "android": "npm run build && npx cap sync android && npx cap open android",
+    "ios": "npm run build && npx cap sync ios && npx cap open ios"
   },
   "dependencies": {
+    "@capacitor-firebase/messaging": "^8.6.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/ios": "^8.6.0",
     "firebase": "^12.19.0",
     "firebase-admin": "^14.4.0",
     "react": "^19.2.8",
@@ -20,6 +28,7 @@
     "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
