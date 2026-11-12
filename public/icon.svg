@@ -1,7 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Paralel Okuma">
-  <rect width="512" height="512" rx="112" fill="#f8f3ee"/>
-  <path d="M82 145c67-20 123-7 174 39v218c-48-46-106-59-174-39V145Z" fill="#fffdf9" stroke="#8f5b39" stroke-width="22" stroke-linejoin="round"/>
-  <path d="M430 145c-67-20-123-7-174 39v218c48-46 106-59 174-39V145Z" fill="#f4e6d8" stroke="#8f5b39" stroke-width="22" stroke-linejoin="round"/>
-  <path d="M132 211c38-8 69 1 96 27M132 270c38-8 69 1 96 27M380 211c-38-8-69 1-96 27M380 270c-38-8-69 1-96 27" fill="none" stroke="#c58d68" stroke-width="16" stroke-linecap="round"/>
-  <path d="M256 184v218" stroke="#6e432a" stroke-width="18" stroke-linecap="round"/>
+  <rect width="512" height="512" fill="#faf2e8"/>
+  <circle cx="256" cy="264" r="171" fill="none" stroke="#dfc9b5" stroke-width="5" opacity=".85"/>
+  <path d="M256 370c-54-38-114-48-182-25V195c70-25 131-15 182 29 51-44 112-54 182-29v150c-68-23-128-13-182 25Z" fill="#987256" opacity=".92"/>
+  <path d="M256 348c-45-33-100-48-161-27V179c61-19 118-6 161 31v138Z" fill="#fffaf4"/>
+  <path d="M256 348c45-33 100-48 161-27V179c-61-19-118-6-161 31v138Z" fill="#fffaf4"/>
+  <path d="M153 180v99l30-24 30 24v-99c-20-5-40-5-60 0Z" fill="#a7ad94"/>
+  <path d="M299 180v99l30-24 30 24v-99c-20-5-40-5-60 0Z" fill="#c89277"/>
+  <path d="M256 211v137" fill="none" stroke="#dcc0a6" stroke-width="6" stroke-linecap="round"/>
+  <path d="M95 339c57-18 116-9 161 31 45-40 104-49 161-31" fill="none" stroke="#805b44" stroke-width="8" stroke-linecap="round"/>
+  <path d="M344 129c-2-27 11-43 16-47 11 26 6 40-16 47ZM351 136c12-25 30-29 42-28-9 26-22 34-42 28Z" fill="#9da789"/>
+  <path d="M343 131c-10-16-26-20-38-18 11 19 22 24 38 18Z" fill="#acb299"/>
+  <path d="M331 119c19 11 31 29 35 46" fill="none" stroke="#8d9977" stroke-width="4" stroke-linecap="round"/>
 </svg>
