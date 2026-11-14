@@ -1375,3 +1375,23 @@ select {
   min-height: 52px;
   font-size: 1rem;
 }
+
+.cover-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 8px;
+  background: linear-gradient(160deg, #a5694a, #6e4630);
+  color: #fff;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+}
+
+.library-cover .cover-fallback {
+  width: 100%;
+  height: 100%;
+}

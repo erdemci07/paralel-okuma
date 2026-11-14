@@ -39,6 +39,7 @@ import type {
   WorkspaceStatus,
 } from './firestoreStore'
 import { registerWebPush, showDeviceTestNotification, supportsWebPush } from './notificationClient'
+import { resolveCoverUrl } from './covers'
 import './App.css'
 
 const tabs = [
@@ -359,7 +360,7 @@ function BookLibrary({
           {sortedBooks.map((book) => (
             <button key={book.id} type="button" className="library-book" onClick={() => onSelectBook(book.id)}>
               <span className="library-cover">
-                <img src={book.coverUrl || book.cover} alt={`${book.title} kitap kapağı`} loading="lazy" />
+                <BookCover book={book} alt={`${book.title} kitap kapağı`} />
               </span>
               <span className="library-book-title">{book.title}</span>
               <span className="library-book-author">{book.author}</span>
@@ -371,6 +372,19 @@ function BookLibrary({
       </section>
     </ShellFrame>
   )
+}
+
+function BookCover({ book, alt, className }: { book: LibraryBook; alt: string; className?: string }) {
+  const src = resolveCoverUrl(book)
+  const [failedSrc, setFailedSrc] = useState('')
+  if (!src || failedSrc === src) {
+    return (
+      <span className={`${className ?? ''} cover-fallback`} role="img" aria-label={alt}>
+        <span>{book.title}</span>
+      </span>
+    )
+  }
+  return <img src={src} alt={alt} className={className} loading="lazy" decoding="async" onError={() => setFailedSrc(src)} />
 }
 
 type WorkspaceLoadState = Record<keyof WorkspaceState, WorkspaceStatus | { state: 'loading' }>
@@ -588,7 +602,7 @@ function ReadingApp({
 
       <section id="book" className="panel book-panel">
         <div className="book-header">
-          <img src={workspace.book.coverUrl || workspace.book.cover} alt={workspace.book.title} className="book-cover" />
+          <BookCover book={workspace.book} alt={workspace.book.title} className="book-cover" />
           <div className="book-copy">
             <h2>{workspace.book.title}</h2>
             <p className="author">{workspace.book.author}</p>
