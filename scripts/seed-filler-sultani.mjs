@@ -14,7 +14,7 @@ const bookRef = db.collection('books').doc(bookId)
 const pageRanges = [[6,37],[38,57],[58,71],[72,87],[88,118],[119,156],[157,192],[193,208]]
 const coverUrl = '/filler-sultani-cover.webp'
 const book = {
-  title: 'Filler Sultanı ile Kırmızı Sakallı Topal Karınca',
+  title: 'Filler Sultanı',
   author: 'Yaşar Kemal',
   authors: ['Yaşar Kemal'],
   publisher: 'Yapı Kredi Yayınları',
@@ -34,8 +34,9 @@ if (!existingBook.exists) {
     updatedAt: FieldValue.serverTimestamp(),
   })
 } else {
-  // Only correct the chapter count of this book; never touch reading records.
+  // Only correct the chapter count and display title of this book; never touch reading records.
   await bookRef.set({
+    title: book.title,
     chapterCount: pageRanges.length,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
