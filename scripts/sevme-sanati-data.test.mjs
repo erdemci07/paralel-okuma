@@ -1,12 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { book, bookId, chapters } from './sevme-sanati-data.mjs'
 
 test('Sevme Sanatı is an independent catalog entry', () => {
   assert.equal(bookId, 'sevme-sanati')
   assert.equal(book.externalId, bookId)
   assert.equal(book.chapterCount, chapters.length)
-  assert.equal(book.coverUrl, '/sevme-sanati-cover.webp')
+  assert.equal(book.coverUrl, '/sevme-sanati-kapak.webp?v=2')
   assert.equal(book.isbn, '9786050207941')
   assert.equal(book.pageCount, 200)
 })
@@ -28,4 +29,13 @@ test('Say edition reading units cover the text without overlapping pages', () =>
       assert.ok(chapter.endPage >= chapter.startPage)
     }
   }
+})
+
+test('cover asset is a valid WebP file at the exact public path', () => {
+  const assetName = book.coverUrl.split('?')[0].replace(/^\//, '')
+  const file = readFileSync(new URL(`../public/${assetName}`, import.meta.url))
+  assert.ok(file.length > 3000)
+  assert.equal(file.toString('ascii', 0, 4), 'RIFF')
+  assert.equal(file.toString('ascii', 8, 12), 'WEBP')
+  assert.equal(file.readUInt32LE(4) + 8, file.length)
 })
