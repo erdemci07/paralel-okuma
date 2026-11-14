@@ -72,3 +72,4 @@ jobs:
       - name: Deploy Firebase Hosting
         if: github.event_name != 'pull_request'
         run: npx --yes firebase-tools@14 deploy --only hosting --project paralel-okuma --non-interactive
+# yetki testi
