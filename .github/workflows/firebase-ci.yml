@@ -23,6 +23,8 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Verify Sevme Sanatı chapter map
+        run: node --test scripts/sevme-sanati-data.test.mjs
       - name: Validate Firebase configuration
         if: github.event_name != 'pull_request'
         env:
@@ -58,6 +60,9 @@ jobs:
       - name: Add Filler Sultanı (preserve existing records)
         if: github.event_name != 'pull_request'
         run: node scripts/seed-filler-sultani.mjs --projectId=paralel-okuma
+      - name: Add Sevme Sanatı (preserve existing records)
+        if: github.event_name != 'pull_request'
+        run: node scripts/seed-sevme-sanati.mjs --projectId=paralel-okuma
       - name: Deploy activity notifications
         # Activate after enabling the Cloud Build API and granting deploy permissions.
         if: github.event_name != 'pull_request' && vars.ENABLE_NOTIFICATION_DEPLOY == 'true'
