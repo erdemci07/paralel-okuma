@@ -8,8 +8,6 @@ import {
   CHAPTER_ACTIVITY,
   CHAPTER_STATUSES,
   PROFILE_TOGGLES,
-  STATUS_ICONS,
-  STATUS_LABELS,
   USERS,
   normalizeUserKey,
 } from './data'
@@ -17,10 +15,8 @@ import type { Status, UserKey } from './data'
 import { isFirebaseConfigured } from './firebase'
 import {
   addComment,
-  cancelPlan,
   DEFAULT_PREFS,
   formatActivityDate,
-  savePlan,
   signInForProfile,
   signOutCurrentUser,
   subscribeAuth,
@@ -100,10 +96,29 @@ const fillerSultaniQuotes = [
   'Gerçek kuvvet, başkalarını ezmekte değil, birlikte ayakta kalmaktadır.',
 ]
 
+const sevmeSanatiQuotes = [
+  'Sevmek, kendiliğinden düşülen bir duygu değil; emek verilerek öğrenilen bir eylemdir.',
+  'Sevilmeyi beklemek kolaydır; asıl zor olan, sevebilen biri olmaktır.',
+  'İlgi göstermediğin bir şeyi gerçekten sevdiğini söyleyemezsin.',
+  'Sevgi, karşındakinin olduğu gibi büyümesine alan açabilmektir.',
+  'Saygı, birini kendi istediğin biçime sokmaya çalışmamaktır.',
+  'Tanımadan sevmek, sevginin yarısında kalmaktır.',
+  'Yalnızlık korkusuyla kurulan yakınlık iki insanı birleştirmez; yalnızca yan yana getirir.',
+  'Kendine saygı duymayan, başkasına verecek sağlam bir sevgi de bulamaz.',
+  'Bencillik kendini fazla sevmek değil, kendini yeterince sevememektir.',
+  'Her sanat gibi sevmek de disiplin, sabır ve yoğunlaşma ister.',
+  'Sevgide vermek bir kayıp değil, insanın kendi zenginliğini fark etmesidir.',
+  'Olgun bir ilişkide iki kişi birleşir, ama ikisi de kendisi olarak kalır.',
+  'Sevgi tek bir kişiye yönelmiş bir duygudan çok, insanın dünyaya bakışıdır.',
+  'Birini gerçekten dinlemek, sevginin en sessiz ama en derin biçimidir.',
+  'Sevgiyi alışveriş gibi hesaplayan, ondan ancak bir sözleşme kadarını alır.',
+]
+
 const quotesByBookId: Record<string, readonly string[]> = {
   [BOOK.id]: readingQuotes,
   'insan-olmak': insanOlmakQuotes,
   'filler-sultani': fillerSultaniQuotes,
+  'sevme-sanati': sevmeSanatiQuotes,
 }
 
 function App() {
@@ -536,13 +551,34 @@ function ReadingApp({
   const progressByUser = useMemo(() => buildProgressMap(workspace.progress), [workspace.progress])
   const currentStatusMap = demoMode ? CHAPTER_STATUSES[currentUser] : progressByUser[currentUser]
   const otherStatusMap = demoMode ? CHAPTER_STATUSES[otherUser] : progressByUser[otherUser]
-  const readingQuote = useMemo(() => pickReadingQuote(workspace.book.id), [workspace.book.id])
+  const [quoteTick, setQuoteTick] = useState(0)
+  const readingQuote = useMemo(() => pickReadingQuote(workspace.book.id, quoteTick), [workspace.book.id, quoteTick])
+  const [filter, setFilter] = useState<ChapterFilter>('all')
+  const [openChapterId, setOpenChapterId] = useState<number | null>(null)
   useReadingScrollPosition(currentUser, workspace.book.id)
+  const total = workspace.chapters.length
   const completedByCurrent = workspace.chapters.filter((chapter) => currentStatusMap[chapter.id] === 'completed').length
   const completedByOther = workspace.chapters.filter((chapter) => otherStatusMap[chapter.id] === 'completed').length
   const sharedCompleted = workspace.chapters.filter(
     (chapter) => currentStatusMap[chapter.id] === 'completed' && otherStatusMap[chapter.id] === 'completed',
   ).length
+  const statusOf = (user: UserKey, chapterId: number): Status =>
+    (user === currentUser ? currentStatusMap[chapterId] : otherStatusMap[chapterId]) ?? 'not_started'
+  const continueChapter =
+    workspace.chapters.find((chapter) => statusOf(currentUser, chapter.id) === 'reading') ??
+    workspace.chapters.find((chapter) => statusOf(currentUser, chapter.id) !== 'completed')
+  const readingCount = workspace.chapters.filter((chapter) => statusOf(currentUser, chapter.id) === 'reading').length
+  const visibleChapters = workspace.chapters.filter((chapter) => {
+    const status = statusOf(currentUser, chapter.id)
+    if (filter === 'reading') return status === 'reading'
+    if (filter === 'left') return status !== 'completed'
+    return true
+  })
+  const openChapter = workspace.chapters.find((chapter) => chapter.id === openChapterId)
+  const unitLabel = workspace.book.id === 'filler-sultani' ? 'Kısımlar' : 'Bölümler'
+  const chapterDate = (user: UserKey, chapterId: number) =>
+    demoMode ? CHAPTER_ACTIVITY[user]?.[chapterId] : latestProgressDate(workspace.progress, user, chapterId)
+  const commentCount = (chapterId: number) => comments.filter((comment) => comment.chapterId === chapterId).length
 
   return (
     <ShellFrame currentUser={currentUser} locationPath={locationPath}>
@@ -554,266 +590,360 @@ function ReadingApp({
         <div className="book-header">
           <img src={workspace.book.coverUrl || workspace.book.cover} alt={workspace.book.title} className="book-cover" />
           <div className="book-copy">
-            <p className="eyebrow">Mevcut kitap</p>
             <h2>{workspace.book.title}</h2>
             <p className="author">{workspace.book.author}</p>
-            <p className="meta">{workspace.chapters.length} bölüm · 1 kitap</p>
+            <p className="meta">{total} {workspace.book.id === 'filler-sultani' ? 'kısım' : 'bölüm'}</p>
           </div>
         </div>
 
-        <blockquote className="book-quote">{readingQuote}</blockquote>
-
-        <div className="progress-grid">
-          <MiniProgress user={currentUser} completed={completedByCurrent} total={workspace.chapters.length} />
-          <MiniProgress user={otherUser} completed={completedByOther} total={workspace.chapters.length} />
+        <div className="progress-bars">
+          <ProgressBar user={currentUser} completed={completedByCurrent} total={total} tone="accent" />
+          <ProgressBar user={otherUser} completed={completedByOther} total={total} tone="teal" />
+          <p className="shared-line">Birlikte tamamlanan: <strong>{sharedCompleted} / {total}</strong></p>
         </div>
 
-        <div className="shared-progress">
-          <span>Birlikte tamamlanan</span>
-          <strong>{sharedCompleted} / {workspace.chapters.length}</strong>
-        </div>
-
+        <figure className="quote-card">
+          <blockquote className="book-quote">{readingQuote}</blockquote>
+          <button type="button" className="icon-button" aria-label="Başka söz göster" onClick={() => setQuoteTick((value) => value + 1)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>
+          </button>
+        </figure>
       </section>
 
-      <section className="panel">
-        <div className="section-header">
-          <h3>{workspace.book.id === 'filler-sultani' ? 'Kısımlar' : 'Bölümler'}</h3>
+      {continueChapter ? (
+        <button type="button" className="continue-card" onClick={() => setOpenChapterId(continueChapter.id)}>
+          <span className="continue-copy">
+            <span className="continue-eyebrow">{statusOf(currentUser, continueChapter.id) === 'reading' ? 'Kaldığın yer' : 'Sıradaki bölüm'}</span>
+            <span className="continue-title">{String(continueChapter.id).padStart(2, '0')} · {continueChapter.title}</span>
+            <span className="continue-meta">
+              {statusOf(currentUser, continueChapter.id) === 'reading' ? 'Okuyorsun' : 'Henüz başlamadın'} · s. {formatPages(continueChapter)}
+              {statusOf(currentUser, continueChapter.id) === 'reading' && chapterDate(currentUser, continueChapter.id) ? ` · ${chapterDate(currentUser, continueChapter.id)}` : ''}
+            </span>
+          </span>
+          <span className="continue-action">Güncelle</span>
+        </button>
+      ) : (
+        <p className="all-done">Tüm bölümleri bitirdin. Tebrikler!</p>
+      )}
+
+      <section className="panel chapter-panel" id="chapters">
+        <div className="chapter-panel-head">
+          <div className="section-header">
+            <h3>{unitLabel}</h3>
+            <span className="chapter-legend">{USERS[currentUser].name[0]} = {USERS[currentUser].name} · {USERS[otherUser].name[0]} = {USERS[otherUser].name}</span>
+          </div>
+          <div className="chapter-filter" role="group" aria-label="Bölüm filtresi">
+            {CHAPTER_FILTERS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={filter === item.id}
+                className={filter === item.id ? 'active' : ''}
+                onClick={() => setFilter(item.id)}
+              >
+                {item.id === 'all' ? `Tümü · ${total}` : item.id === 'reading' ? `Okuyorum${readingCount ? ` · ${readingCount}` : ''}` : `Kalanlar · ${total - completedByCurrent}`}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {workspace.chapters.map((chapter) => {
-          const plan = workspace.plans.find((item) => item.chapterId === chapter.id)
-          const currentStatus = currentStatusMap[chapter.id] ?? 'not_started'
-          const otherStatus = otherStatusMap[chapter.id] ?? 'not_started'
-          const currentActivity = demoMode ? CHAPTER_ACTIVITY[currentUser]?.[chapter.id] : latestProgressDate(workspace.progress, currentUser, chapter.id)
-          const otherActivity = demoMode ? CHAPTER_ACTIVITY[otherUser]?.[chapter.id] : latestProgressDate(workspace.progress, otherUser, chapter.id)
-          const currentProgressDate = demoMode ? undefined : progressDateValue(workspace.progress, currentUser, chapter.id)
-
-          return (
-            <ChapterCard
-              key={`${chapter.id}-${currentStatus}-${otherStatus}-${currentProgressDate ?? ''}-${plan?.plannedDate ?? ''}-${plan?.type ?? ''}`}
-              chapter={chapter}
-              bookId={workspace.book.id}
-              bookTitle={workspace.book.title}
-              plan={plan}
-              currentUser={currentUser}
-              otherUser={otherUser}
-              currentStatus={currentStatus}
-              otherStatus={otherStatus}
-              currentActivity={currentActivity}
-              otherActivity={otherActivity}
-              currentProgressDate={currentProgressDate}
-              profile={profile}
-              demoMode={demoMode}
-              comments={comments.filter((comment) => comment.chapterId === chapter.id)}
-            />
-          )
-        })}
+        <ul className="chapter-rows">
+          {visibleChapters.map((chapter) => {
+            const mine = statusOf(currentUser, chapter.id)
+            const theirs = statusOf(otherUser, chapter.id)
+            const notes = commentCount(chapter.id)
+            return (
+              <li key={chapter.id}>
+                <button
+                  type="button"
+                  className={mine === 'reading' ? 'chapter-row current' : 'chapter-row'}
+                  onClick={() => setOpenChapterId(chapter.id)}
+                >
+                  <span className="chapter-row-number">{String(chapter.id).padStart(2, '0')}</span>
+                  <span className="chapter-row-copy">
+                    <span className="chapter-row-title">{chapter.title}</span>
+                    <span className="chapter-row-meta">
+                      s. {formatPages(chapter)}{notes ? ` · ${notes} not` : ''}{mine === 'reading' ? ' · okuyorsun' : ''}
+                    </span>
+                  </span>
+                  <span className="chapter-row-badges">
+                    <StatusBadge user={currentUser} status={mine} />
+                    <StatusBadge user={otherUser} status={theirs} />
+                  </span>
+                  <svg className="chapter-row-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+        {visibleChapters.length === 0 ? <p className="chapter-empty">Bu filtrede bölüm yok.</p> : null}
       </section>
 
       {commentsError ? <section className="panel notice-panel"><p>{commentsError}</p></section> : null}
       <ActivityPanel activities={workspace.activities} demoMode={demoMode} />
       <ProfilePanel profile={profile} demoMode={demoMode} />
+
+      {openChapter ? (
+        <ChapterSheet
+          key={`${openChapter.id}-${statusOf(currentUser, openChapter.id)}`}
+          chapter={openChapter}
+          bookId={workspace.book.id}
+          bookTitle={workspace.book.title}
+          currentUser={currentUser}
+          otherUser={otherUser}
+          currentStatus={statusOf(currentUser, openChapter.id)}
+          otherStatus={statusOf(otherUser, openChapter.id)}
+          otherActivity={chapterDate(otherUser, openChapter.id)}
+          currentProgressDate={demoMode ? undefined : progressDateValue(workspace.progress, currentUser, openChapter.id)}
+          profile={profile}
+          demoMode={demoMode}
+          comments={comments.filter((comment) => comment.chapterId === openChapter.id)}
+          onClose={() => setOpenChapterId(null)}
+        />
+      ) : null}
     </ShellFrame>
   )
 }
 
-function MiniProgress({ user, completed, total }: { user: UserKey; completed: number; total: number }) {
+type ChapterFilter = 'all' | 'reading' | 'left'
+
+const CHAPTER_FILTERS: { id: ChapterFilter }[] = [{ id: 'all' }, { id: 'reading' }, { id: 'left' }]
+
+const STATUS_WORDS: Record<Status, string> = {
+  not_started: 'başlamadı',
+  reading: 'okuyor',
+  completed: 'bitirdi',
+}
+
+const MY_STATUS_WORDS: Record<Status, string> = {
+  not_started: 'başlamadın',
+  reading: 'okuyorsun',
+  completed: 'bitirdin',
+}
+
+const STATUS_BUTTON_LABELS: Record<Status, string> = {
+  not_started: 'Başlamadım',
+  reading: 'Okuyorum',
+  completed: 'Bitirdim',
+}
+
+function formatPages(chapter: typeof CHAPTERS[number]) {
+  return `${chapter.startPage}–${chapter.endPage === 'end' ? 'son' : chapter.endPage}`
+}
+
+function ProgressBar({ user, completed, total, tone }: { user: UserKey; completed: number; total: number; tone: 'accent' | 'teal' }) {
+  const percent = total ? Math.round((completed / total) * 100) : 0
   return (
-    <div className="mini-progress">
-      <span>{USERS[user].name}</span>
-      <strong>{completed} / {total} · {Math.round((completed / total) * 100)}%</strong>
+    <div className="progress-bar-row">
+      <div className="progress-bar-label">
+        <span>{USERS[user].name}</span>
+        <span>{completed} / {total} · %{percent}</span>
+      </div>
+      <div className="progress-track" role="progressbar" aria-label={`${USERS[user].name} ilerlemesi`} aria-valuemin={0} aria-valuemax={total} aria-valuenow={completed}>
+        <div className={`progress-fill ${tone}`} style={{ width: `${percent}%` }} />
+      </div>
     </div>
   )
 }
 
-function ChapterCard({
+function StatusBadge({ user, status }: { user: UserKey; status: Status }) {
+  return (
+    <span className={`status-badge ${status}`} title={`${USERS[user].name}: ${STATUS_WORDS[status]}`} aria-label={`${USERS[user].name} ${STATUS_WORDS[status]}`}>
+      {USERS[user].name[0]}
+    </span>
+  )
+}
+
+function ChapterSheet({
   chapter,
   bookId,
   bookTitle,
-  plan,
   currentUser,
   otherUser,
   currentStatus,
   otherStatus,
-  currentActivity,
   otherActivity,
   currentProgressDate,
   profile,
   demoMode,
   comments,
+  onClose,
 }: {
   chapter: typeof CHAPTERS[number]
   bookId: string
   bookTitle: string
-  plan?: PlanDoc
   currentUser: UserKey
   otherUser: UserKey
   currentStatus: Status
   otherStatus: Status
-  currentActivity?: string
   otherActivity?: string
   currentProgressDate?: string
   profile: MemberProfile | null
   demoMode: boolean
   comments: CommentDoc[]
+  onClose: () => void
 }) {
-  const chapterStateKey = `reading-expanded:${currentUser}:${bookId}:${chapter.id}`
-  const [isCollapsed, setIsCollapsed] = useState(() => sessionStorage.getItem(chapterStateKey) !== '1')
+  const [status, setStatus] = useState<Status>(currentStatus)
   const [activityDate, setActivityDate] = useState(currentProgressDate ?? todayDateValue())
-  const [planDate, setPlanDate] = useState(plan?.plannedDate ?? todayDateValue())
-  const [planNote, setPlanNote] = useState('')
-  const [planType, setPlanType] = useState<'personal' | 'shared'>('shared')
-  const [commentText, setCommentText] = useState('')
+  const [noteText, setNoteText] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
+  const readOnly = demoMode || !profile
+  const today = todayDateValue()
+  const yesterday = todayDateValue(-1)
 
-  async function handleStatus(status: Status) {
-    if (!profile) return
-    setError('')
-    const nextActivityDate = currentStatus === 'completed' && status !== 'completed' ? todayDateValue() : activityDate
-    setActivityDate(nextActivityDate)
-    try {
-      await updateProgress(profile, chapter.id, status, nextActivityDate, bookId, bookTitle)
-    } catch {
-      setError('Durum kaydedilemedi.')
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
     }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose])
+
+  function pickStatus(next: Status) {
+    setStatus(next)
+    if (currentStatus === 'completed' && next !== 'completed') setActivityDate(today)
   }
 
-  async function handlePlan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!profile) return
-    setError('')
-    try {
-      await savePlan(profile, chapter.id, planDate, planNote, planType, plan?.id, bookId)
-      setPlanNote('')
-    } catch {
-      setError('Plan kaydedilemedi.')
-    }
-  }
+  const statusChanged = status !== currentStatus
+  const dateChanged = status !== 'not_started' && activityDate !== (currentProgressDate ?? today)
+  const hasNote = noteText.trim().length > 0
+  const canSave = !readOnly && !isSaving && (statusChanged || dateChanged || hasNote)
 
-  async function handleComment(event: FormEvent<HTMLFormElement>) {
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!profile) return
+    if (!profile || !canSave) return
     setError('')
+    setIsSaving(true)
     try {
-      await addComment(profile, chapter.id, commentText, bookId)
-      setCommentText('')
+      if (statusChanged || dateChanged) {
+        await updateProgress(profile, chapter.id, status, activityDate, bookId, bookTitle)
+      }
+      if (hasNote) {
+        await addComment(profile, chapter.id, noteText, bookId)
+        setNoteText('')
+      }
+      onClose()
     } catch {
-      setError('Yorum kaydedilemedi.')
+      setError('Kaydedilemedi. Bağlantını kontrol edip tekrar dene.')
+      setIsSaving(false)
     }
   }
 
   return (
-    <article className="chapter-card">
-      <div className="chapter-head">
-        <div className="chapter-number">{String(chapter.id).padStart(2, '0')}</div>
-        <div className="chapter-meta">
-          <h4>{chapter.title}</h4>
-          <p>s. {chapter.startPage}-{chapter.endPage === 'end' ? 'son' : chapter.endPage}</p>
+    <div className="sheet-backdrop" onClick={onClose}>
+      <form
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`sheet-title-${chapter.id}`}
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={handleSave}
+      >
+        <div className="sheet-handle" aria-hidden="true" />
+        <div className="sheet-head">
+          <div className="sheet-head-copy">
+            <span className="sheet-eyebrow">Bölüm {String(chapter.id).padStart(2, '0')} · s. {formatPages(chapter)}</span>
+            <h3 id={`sheet-title-${chapter.id}`}>{chapter.title}</h3>
+          </div>
+          <button type="button" className="sheet-close" aria-label="Kapat" onClick={onClose}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
         </div>
-        <button type="button" className="chapter-toggle" onClick={() => {
-          setIsCollapsed((value) => {
-            sessionStorage.setItem(chapterStateKey, value ? '1' : '0')
-            return !value
-          })
-        }}>
-          {isCollapsed ? 'Genişlet' : 'Gizle'}
-        </button>
-      </div>
 
-      {plan && !isCollapsed ? (
-        <div className="plan-badge">
-          {formatActivityDate(plan.plannedDate)} · {plan.type === 'shared' ? 'ortak' : USERS[plan.createdBy].shortName}
-          {profile ? <button type="button" onClick={() => void cancelPlan(profile, plan.id, chapter.id, bookId)}>İptal</button> : null}
+        <div className="sheet-people">
+          <span className={`sheet-person ${status}`}><strong>Sen</strong> · {MY_STATUS_WORDS[status]}</span>
+          <span className={`sheet-person ${otherStatus}`}>
+            <strong>{USERS[otherUser].name}</strong> · {STATUS_WORDS[otherStatus]}{otherStatus !== 'not_started' && otherActivity ? ` · ${otherActivity}` : ''}
+          </span>
         </div>
-      ) : null}
 
-      {isCollapsed ? (
-        <div className="chapter-compact-summary">
-          <span>{USERS[currentUser].name}: {STATUS_LABELS[currentStatus]}</span>
-          <span>{USERS[otherUser].name}: {STATUS_LABELS[otherStatus]}</span>
-          {plan ? <span className="chapter-compact-plan">Plan: {formatActivityDate(plan.plannedDate)}</span> : null}
-          {comments.length > 0 ? <span>{comments.length} not</span> : null}
-        </div>
-      ) : (
-        <div className="status-stack">
-          <PersonStatus user={currentUser} status={currentStatus} activity={currentActivity} />
-          <PersonStatus user={otherUser} status={otherStatus} activity={otherActivity} readOnly />
-        </div>
-      )}
-
-      {!isCollapsed ? (
-        <>
-          <div className="status-controls" aria-label={`${chapter.title} için durum seçimi`}>
-            {(['not_started', 'reading', 'completed'] as const).map((status) => (
+        <div className="sheet-field">
+          <p className="sheet-label">Okuma durumun</p>
+          <div className="sheet-status" role="group" aria-label="Okuma durumu">
+            {(['not_started', 'reading', 'completed'] as const).map((item) => (
               <button
-                key={status}
+                key={item}
                 type="button"
-                className={currentStatus === status ? 'segment active' : 'segment'}
-                onClick={() => void handleStatus(status)}
-                disabled={demoMode || !profile}
+                aria-pressed={status === item}
+                className={status === item ? `active ${item}` : ''}
+                onClick={() => pickStatus(item)}
+                disabled={readOnly}
               >
-                {STATUS_ICONS[status]} {STATUS_LABELS[status]}
+                {STATUS_BUTTON_LABELS[item]}
               </button>
             ))}
           </div>
+        </div>
 
-          <div className="chapter-action-group">
-            <p className="action-title">Okuma durumu</p>
-            <label>
-              Durum tarihi
+        {status !== 'not_started' ? (
+          <div className="sheet-field">
+            <label className="sheet-label" htmlFor={`sheet-date-${chapter.id}`}>{status === 'completed' ? 'Bitirdiğin tarih' : 'Başladığın tarih'}</label>
+            <div className="sheet-date">
+              <button type="button" className={activityDate === today ? 'active' : ''} onClick={() => setActivityDate(today)} disabled={readOnly}>Bugün</button>
+              <button type="button" className={activityDate === yesterday ? 'active' : ''} onClick={() => setActivityDate(yesterday)} disabled={readOnly}>Dün</button>
               <input
+                id={`sheet-date-${chapter.id}`}
                 type="date"
                 lang="tr-TR"
+                max={today}
                 value={activityDate}
-                onChange={(event) => setActivityDate(event.target.value)}
-                disabled={demoMode || currentStatus === 'completed'}
+                onChange={(event) => setActivityDate(event.target.value || today)}
+                disabled={readOnly}
               />
-            </label>
+            </div>
           </div>
+        ) : null}
 
-          <form className="chapter-action-group plan-form" onSubmit={handlePlan}>
-            <p className="action-title">Okuma planı</p>
-            <label>
-              Plan tarihi
-              <input type="date" lang="tr-TR" value={planDate} onChange={(event) => setPlanDate(event.target.value)} disabled={demoMode} />
-            </label>
-            <select aria-label="Plan türü" value={planType} onChange={(event) => setPlanType(event.target.value as 'personal' | 'shared')} disabled={demoMode}>
-              <option value="shared">Ortak plan</option>
-              <option value="personal">Kişisel plan</option>
-            </select>
-            <input type="text" placeholder="Plan notu" value={planNote} onChange={(event) => setPlanNote(event.target.value)} disabled={demoMode} />
-            <button type="submit" className="ghost-button variant-small" disabled={demoMode || !profile}>Planla</button>
-          </form>
+        <div className="sheet-field sheet-notes-field">
+          <p className="sheet-label">Notlar{comments.length ? ` · ${comments.length}` : ''}</p>
+          {comments.length ? (
+            <ul className="sheet-notes">
+              {comments.map((comment) => {
+                const isMine = comment.authorProfileId === currentUser
+                const when = formatCommentDate(comment.createdAt)
+                return (
+                  <li key={comment.id} className={isMine ? 'mine' : 'theirs'}>
+                    <strong>{isMine ? 'Sen' : USERS[comment.authorProfileId]?.shortName ?? 'Üye'}{when ? ` · ${when}` : ''}</strong>
+                    {comment.text}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="sheet-notes-empty">Bu bölüm için henüz not yok.</p>
+          )}
+          <label className="visually-hidden" htmlFor={`sheet-note-${chapter.id}`}>Not ekle</label>
+          <textarea
+            id={`sheet-note-${chapter.id}`}
+            rows={2}
+            placeholder="Bu bölüm için not yaz…"
+            value={noteText}
+            onChange={(event) => setNoteText(event.target.value)}
+            disabled={readOnly}
+          />
+        </div>
 
-          <form className="comment-form" onSubmit={handleComment}>
-            <input type="text" placeholder="Bu bölüm için kısa not" value={commentText} onChange={(event) => setCommentText(event.target.value)} disabled={demoMode} />
-            <button type="submit" className="ghost-button variant-small" disabled={demoMode || !profile}>Yaz</button>
-          </form>
-        </>
-      ) : null}
-
-      {comments.length ? (
-        <ul className={isCollapsed ? 'comment-list compact' : 'comment-list'}>
-          {comments.map((comment) => (
-            <li key={comment.id}>
-              {isCollapsed ? comment.text : <><strong>{USERS[comment.authorProfileId]?.shortName ?? 'Üye'}:</strong> {comment.text}</>}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {error ? <p className="form-error">{error}</p> : null}
-    </article>
+        {error ? <p className="form-error">{error}</p> : null}
+        <button type="submit" className="primary-button sheet-save" disabled={!canSave}>
+          {isSaving ? 'Kaydediliyor…' : 'Kaydet'}
+        </button>
+      </form>
+    </div>
   )
 }
 
-function PersonStatus({ user, status, activity, readOnly = false }: { user: UserKey; status: Status; activity?: string; readOnly?: boolean }) {
-  return (
-    <div className={readOnly ? 'person-status read-only' : 'person-status'}>
-      <span>{USERS[user].name}</span>
-      <strong>{STATUS_ICONS[status]} {STATUS_LABELS[status]}</strong>
-      {activity ? <em>{activity}</em> : null}
-    </div>
-  )
+function formatCommentDate(value: unknown) {
+  if (!value || typeof value !== 'object' || !('toDate' in value)) return ''
+  const toDate = (value as { toDate?: () => Date }).toDate
+  if (typeof toDate !== 'function') return ''
+  const date = toDate.call(value)
+  return new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' }).format(date)
 }
 
 function ActivityPanel({ activities, demoMode }: { activities: ActivityDoc[]; demoMode: boolean }) {
@@ -831,7 +961,7 @@ function ActivityPanel({ activities, demoMode }: { activities: ActivityDoc[]; de
         ) : null}
       </div>
       {activities.length === 0 ? (
-        <p className="activity-empty">{demoMode ? 'Demo modunda hareket kaydı tutulmaz.' : 'Bu kitapta henüz hareket yok. Okumaya başlayınca, bölüm tamamlayınca, not yazınca veya plan oluşturunca burada görünecek.'}</p>
+        <p className="activity-empty">{demoMode ? 'Demo modunda hareket kaydı tutulmaz.' : 'Bu kitapta henüz hareket yok. Okumaya başlayınca, bölüm tamamlayınca, veya not yazınca burada görünecek.'}</p>
       ) : (
         <ul className="activity-list">
           {items.map((item) => (
@@ -873,7 +1003,7 @@ function ProfilePanel({ profile, demoMode }: { profile: MemberProfile | null; de
           <span className="status-pill">Tercihler</span>
         </div>
         <div className="toggle-list">
-          {keys.map((key, index) => (
+          {keys.map((key, index) => key === 'notifyPlanChanges' ? null : (
             <label key={key} className="toggle-item">
               <input type="checkbox" checked={prefs[key]} onChange={() => void toggle(key)} disabled={demoMode || !profile} />
               <span>{PROFILE_TOGGLES[index] ?? key}</span>
@@ -1111,8 +1241,12 @@ function progressDateValue(progress: ProgressDoc[], user: UserKey, chapterId: nu
   return progress.find((entry) => entry.userId === user && entry.chapterId === chapterId)?.activityDate
 }
 
-function todayDateValue() {
-  return new Date().toISOString().slice(0, 10)
+function todayDateValue(offsetDays = 0) {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
 }
 
 function useReadingScrollPosition(userId: UserKey, bookId: string) {
@@ -1149,7 +1283,9 @@ function useReadingScrollPosition(userId: UserKey, bookId: string) {
   }, [userId, bookId])
 }
 
-function pickReadingQuote(bookId: string) {
+// `refresh` only forces a new pick when the reader asks for another quote.
+function pickReadingQuote(bookId: string, refresh = 0) {
+  void refresh
   const quotes = quotesByBookId[bookId] ?? ['Her yeni kitap, yeni bir düşünce yolculuğudur.']
   const storageKey = bookId === BOOK.id
     ? 'last-reading-quote-index'
