@@ -2,7 +2,7 @@
   "name": "Paralel Okuma",
   "short_name": "Paralel",
   "description": "Birlikte okuyalım, ilerlemeyi takip edelim, notlar paylaşalım.",
-  "start_url": "/faruk",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#f8f3ee",
   "theme_color": "#8f5b39",
