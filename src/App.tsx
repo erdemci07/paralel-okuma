@@ -144,21 +144,11 @@ function ProfileRoute() {
 
 function ProfileChooser() {
   const navigate = useNavigate()
-  const [switchingTo, setSwitchingTo] = useState<UserKey | null>(null)
-  const [error, setError] = useState('')
 
-  async function selectProfile(nextUser: UserKey) {
-    if (switchingTo) return
-    setSwitchingTo(nextUser)
-    setError('')
-    try {
-      // Each profile keeps its own Firebase identity and reading history.
-      await signOutCurrentUser()
-      navigate(`/${nextUser}`)
-    } catch {
-      setError('Kullanıcı değiştirilemedi. Lütfen yeniden deneyin.')
-      setSwitchingTo(null)
-    }
+  // Navigate immediately. Firebase sign-out can stall in iOS standalone Safari.
+  // When another account is active, the destination asks for its own password.
+  function selectProfile(nextUser: UserKey) {
+    navigate(`/${nextUser}`)
   }
 
   return (
@@ -183,16 +173,14 @@ function ProfileChooser() {
                 key={user}
                 type="button"
                 className="account-option"
-                disabled={switchingTo !== null}
-                onClick={() => void selectProfile(user)}
+                onClick={() => selectProfile(user)}
               >
                 <span className="account-avatar" aria-hidden="true">{USERS[user].name.charAt(0)}</span>
                 <strong>{USERS[user].name}</strong>
-                <span className="account-option-hint">{switchingTo === user ? 'Geçiş yapılıyor...' : 'Profilime git →'}</span>
+                <span className="account-option-hint">Profilime git →</span>
               </button>
             ))}
           </div>
-          {error ? <p className="form-error" role="alert">{error}</p> : null}
           <p className="account-note">Her kullanıcı kendi şifresiyle giriş yapar. Okuma kayıtları korunur.</p>
         </section>
       </main>
@@ -332,18 +320,9 @@ function ProfilePage({ currentUser }: { currentUser: UserKey }) {
   }
 
   if (profile.profileId !== currentUser) {
-    return (
-      <ShellFrame currentUser={profile.profileId} locationPath={location.pathname}>
-        <section className="panel notice-panel">
-          <h2>Yanlış profil</h2>
-          <p>Bu oturum {USERS[profile.profileId].name} için açık. {USERS[currentUser].name} sayfasında düzenleme yapmak için o kullanıcıyla giriş yapın.</p>
-          <div className="inline-actions">
-            <Link className="ghost-button" to={`/${profile.profileId}`}>Kendi sayfama git</Link>
-            <button type="button" className="ghost-button" onClick={() => void signOutCurrentUser()}>{USERS[currentUser].name} olarak giriş yap</button>
-          </div>
-        </section>
-      </ShellFrame>
-    )
+    // Signing in with the chosen account replaces the existing Firebase session.
+    // Never attempt an awaited sign-out as a prerequisite to showing the login form.
+    return <LoginScreen key={currentUser} currentUser={currentUser} activeProfile={profile.profileId} />
   }
 
   function openBook(bookId: string) {
@@ -506,7 +485,7 @@ function SetupPanel({ message }: { message: string }) {
   )
 }
 
-function LoginScreen({ currentUser }: { currentUser: UserKey }) {
+function LoginScreen({ currentUser, activeProfile }: { currentUser: UserKey; activeProfile?: UserKey }) {
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -530,7 +509,11 @@ function LoginScreen({ currentUser }: { currentUser: UserKey }) {
       <form className="panel login-card" onSubmit={onSubmit}>
         <div>
           <h2>Hoş geldin</h2>
-          <p className="login-profile">{USERS[currentUser].name} olarak devam et</p>
+          <p className="login-profile">
+            {activeProfile
+              ? `${USERS[activeProfile].name} oturumu açık. ${USERS[currentUser].name} olarak devam etmek için şifreni gir.`
+              : `${USERS[currentUser].name} olarak devam et`}
+          </p>
         </div>
         <input
           className="visually-hidden"
