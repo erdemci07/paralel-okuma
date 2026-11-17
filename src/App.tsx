@@ -8,6 +8,7 @@ import {
   CHAPTER_ACTIVITY,
   CHAPTER_STATUSES,
   PROFILE_TOGGLES,
+  ROUTE_USERS,
   USERS,
   normalizeUserKey,
 } from './data'
@@ -126,19 +127,82 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/faruk" replace />} />
-        <Route path="/:userKey/*" element={<ProfilePage />} />
-        <Route path="*" element={<Navigate to="/faruk" replace />} />
+        <Route path="/" element={<ProfileChooser />} />
+        <Route path="/:userKey/*" element={<ProfileRoute />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )
 }
 
-function ProfilePage() {
+function ProfileRoute() {
   const { userKey } = useParams<{ userKey?: string }>()
+  const currentUser = normalizeUserKey(userKey)
+
+  return currentUser ? <ProfilePage key={currentUser} currentUser={currentUser} /> : <Navigate to="/" replace />
+}
+
+function ProfileChooser() {
+  const navigate = useNavigate()
+  const [switchingTo, setSwitchingTo] = useState<UserKey | null>(null)
+  const [error, setError] = useState('')
+
+  async function selectProfile(nextUser: UserKey) {
+    if (switchingTo) return
+    setSwitchingTo(nextUser)
+    setError('')
+    try {
+      // Each profile keeps its own Firebase identity and reading history.
+      await signOutCurrentUser()
+      navigate(`/${nextUser}`)
+    } catch {
+      setError('Kullanıcı değiştirilemedi. Lütfen yeniden deneyin.')
+      setSwitchingTo(null)
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand-wrap">
+          <div className="brand-badge" aria-hidden="true"><img src="/icon.svg" alt="" /></div>
+          <div>
+            <p className="eyebrow">Paralel Okuma</p>
+            <h1>Birlikte okuma yolculuğu</h1>
+          </div>
+        </div>
+      </header>
+      <main className="screen">
+        <section className="panel account-panel">
+          <p className="eyebrow">Hoş geldin</p>
+          <h2>Kim okuyacak?</h2>
+          <p className="account-description">Devam etmek için kendi profilini seç.</p>
+          <div className="account-grid">
+            {ROUTE_USERS.map((user) => (
+              <button
+                key={user}
+                type="button"
+                className="account-option"
+                disabled={switchingTo !== null}
+                onClick={() => void selectProfile(user)}
+              >
+                <span className="account-avatar" aria-hidden="true">{USERS[user].name.charAt(0)}</span>
+                <strong>{USERS[user].name}</strong>
+                <span className="account-option-hint">{switchingTo === user ? 'Geçiş yapılıyor...' : 'Profilime git →'}</span>
+              </button>
+            ))}
+          </div>
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          <p className="account-note">Her kullanıcı kendi şifresiyle giriş yapar. Okuma kayıtları korunur.</p>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function ProfilePage({ currentUser }: { currentUser: UserKey }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const currentUser = normalizeUserKey(userKey) ?? 'faruk'
   const selectedBookId = new URLSearchParams(location.search).get('book')
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
   const [profile, setProfile] = useState<MemberProfile | null>(null)
@@ -275,7 +339,7 @@ function ProfilePage() {
           <p>Bu oturum {USERS[profile.profileId].name} için açık. {USERS[currentUser].name} sayfasında düzenleme yapmak için o kullanıcıyla giriş yapın.</p>
           <div className="inline-actions">
             <Link className="ghost-button" to={`/${profile.profileId}`}>Kendi sayfama git</Link>
-            <button type="button" className="ghost-button" onClick={() => void signOutCurrentUser()}>Çıkış yap</button>
+            <button type="button" className="ghost-button" onClick={() => void signOutCurrentUser()}>{USERS[currentUser].name} olarak giriş yap</button>
           </div>
         </section>
       </ShellFrame>
@@ -525,6 +589,7 @@ function ShellFrame({
             <h1>{USERS[currentUser].name}</h1>
           </div>
         </div>
+        <Link className="topbar-switch" to="/">Kullanıcı değiştir</Link>
       </header>
       <main className="screen" data-path={locationPath}>{children}</main>
       {showBottomNav ? <BottomNav /> : null}
